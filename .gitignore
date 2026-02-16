@@ -1,0 +1,23 @@
+# Test screenshots from browser automation
+network-*.png
+chord-*.png
+steam-filter-*.png
+steam-chord-*.png
+steam-back-*.png
+steam-focus-*.png
+steam-network-*.png
+universe-*.png
+
+# Keep the social card
+!steam-universe-4k.png
+.playwright-mcp/
+
+# Agent cruft
+.aider.*
+temp_*
+*_STATUS.md
+*_PROGRESS.md
+CRITIC.md
+ONBOARD.md
+SUGGESTIONS.md
+REPO_AUDIT.md

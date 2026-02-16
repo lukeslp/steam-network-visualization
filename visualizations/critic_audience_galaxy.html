@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Critic vs. Audience Galaxy</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; }
+        #container { width: 100vw; height: 100vh; }
+        #ui { position: absolute; top: 20px; left: 20px; color: white; font-family: Arial, sans-serif; }
+        #yearSlider { width: 200px; }
+        #tooltip { position: absolute; background: rgba(0,0,0,0.8); color: white; padding: 10px; display: none; }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+    <div id="ui">
+        <h2>Critic vs. Audience Galaxy</h2>
+        <label for="yearSlider">Year Range:</label>
+        <input type="range" id="yearSlider" min="1900" max="2023" value="2023">
+        <span id="yearDisplay">All Years</span>
+    </div>
+    <div id="tooltip"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script>
+        // Scene setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.getElementById('container').appendChild(renderer.domElement);
+
+        // Controls
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+
+        // Camera position
+        camera.position.set(0, 0, 50);
+
+        // Placeholder data (replace with real data loading)
+        const movies = [];
+        for (let i = 0; i < 1000; i++) {
+            movies.push({
+                title: `Movie ${i}`,
+                criticScore: Math.random() * 100,
+                audienceScore: Math.random() * 100,
+                deviation: Math.random() * 50,
+                year: 1900 + Math.floor(Math.random() * 123),
+                genre: ['Drama', 'Action', 'Comedy'][Math.floor(Math.random() * 3)],
+                popularity: Math.random() * 10000
+            });
+        }
+
+        // Scales
+        const xScale = d3.scaleLinear().domain([0, 100]).range([-20, 20]);
+        const yScale = d3.scaleLinear().domain([0, 100]).range([-20, 20]);
+        const zScale = d3.scaleLinear().domain([0, 50]).range([-10, 10]);
+        const sizeScale = d3.scaleSqrt().domain([0, 10000]).range([0.1, 1]);
+
+        // Material for stars
+        const starMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 });
+
+        // Create starfield
+        const stars = new THREE.Group();
+        movies.forEach(movie => {
+            const geometry = new THREE.SphereGeometry(sizeScale(movie.popularity), 8, 8);
+            const star = new THREE.Mesh(geometry, starMaterial);
+            star.position.set(
+                xScale(movie.criticScore),
+                yScale(movie.audienceScore),
+                zScale(movie.deviation)
+            );
+            star.userData = movie;
+            stars.add(star);
+        });
+        scene.add(stars);
+
+        // Nebula background (simplified)
+        const nebulaMaterial = new THREE.MeshBasicMaterial({ color: 0x220033, transparent: true, opacity: 0.3 });
+        const nebula = new THREE.Mesh(new THREE.SphereGeometry(50, 32, 32), nebulaMaterial);
+        scene.add(nebula);
+
+        // Tooltip and interaction
+        const tooltip = document.getElementById('tooltip');
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        function onMouseMove(event) {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(stars.children);
+            if (intersects.length > 0) {
+                const movie = intersects[0].object.userData;
+                tooltip.style.display = 'block';
+                tooltip.style.left = event.clientX + 10 + 'px';
+                tooltip.style.top = event.clientY + 'px';
+                tooltip.innerHTML = `
+                    <strong>${movie.title}</strong><br>
+                    Critic Score: ${movie.criticScore.toFixed(1)}<br>
+                    Audience Score: ${movie.audienceScore.toFixed(1)}<br>
+                    Year: ${movie.year}<br>
+                    Genre: ${movie.genre}
+                `;
+            } else {
+                tooltip.style.display = 'none';
+            }
+        }
+
+        window.addEventListener('mousemove', onMouseMove);
+
+        // Year slider filter
+        const yearSlider = document.getElementById('yearSlider');
+        const yearDisplay = document.getElementById('yearDisplay');
+        yearSlider.addEventListener('input', () => {
+            const maxYear = parseInt(yearSlider.value);
+            yearDisplay.textContent = `Up to ${maxYear}`;
+            stars.children.forEach(star => {
+                star.visible = star.userData.year <= maxYear;
+            });
+        });
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Resize handler
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Director-Actor Constellation Network</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; }
+        #container { width: 100vw; height: 100vh; }
+        #ui { position: absolute; top: 20px; left: 20px; color: white; font-family: Arial, sans-serif; }
+        #yearSlider { width: 200px; }
+        #tooltip { position: absolute; background: rgba(0,0,0,0.8); color: white; padding: 10px; display: none; }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+    <div id="ui">
+        <h2>Director-Actor Network</h2>
+        <label for="yearSlider">Year:</label>
+        <input type="range" id="yearSlider" min="1900" max="2023" value="1900">
+        <span id="yearDisplay">1900</span>
+    </div>
+    <div id="tooltip"></div>
+
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script>
+        // SVG setup
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        const svg = d3.select("#container")
+            .append("svg")
+            .attr("width", width)
+            .attr("height", height);
+
+        // Placeholder data (replace with real data loading)
+        const nodes = [
+            { id: "Director1", type: "director", projects: 10, avgRating: 7.5, firstYear: 1990 },
+            { id: "Actor1", type: "actor", projects: 15, avgRating: 8.0, firstYear: 1985 },
+            { id: "Actor2", type: "actor", projects: 5, avgRating: 6.5, firstYear: 1995 }
+        ];
+        const links = [
+            { source: "Director1", target: "Actor1", count: 3, year: 1995 },
+            { source: "Director1", target: "Actor2", count: 1, year: 2000 }
+        ];
+
+        // Scales
+        const nodeSize = d3.scaleSqrt().domain([1, 20]).range([5, 20]);
+        const linkWidth = d3.scaleLinear().domain([1, 5]).range([1, 5]);
+        const color = d3.scaleOrdinal(d3.schemeCategory10);
+
+        // Force simulation
+        const simulation = d3.forceSimulation(nodes)
+            .force("link", d3.forceLink(links).id(d => d.id).distance(100))
+            .force("charge", d3.forceManyBody().strength(-800))
+            .force("center", d3.forceCenter(width / 2, height / 2))
+            .force("collide", d3.forceCollide().radius(80));
+
+        // Draw links
+        const link = svg.append("g")
+            .selectAll("line")
+            .data(links)
+            .enter()
+            .append("line")
+            .attr("stroke", "#999")
+            .attr("stroke-width", d => linkWidth(d.count))
+            .attr("opacity", 0);
+
+        // Draw nodes
+        const node = svg.append("g")
+            .selectAll("circle")
+            .data(nodes)
+            .enter()
+            .append("circle")
+            .attr("r", d => nodeSize(d.projects))
+            .attr("fill", d => color(d.type))
+            .attr("opacity", 0)
+            .call(d3.drag()
+                .on("start", dragstarted)
+                .on("drag", dragged)
+                .on("end", dragended))
+            .on("mouseover", handleMouseOver)
+            .on("mouseout", handleMouseOut);
+
+        // Tooltip
+        const tooltip = d3.select("#tooltip");
+
+        function handleMouseOver(event, d) {
+            tooltip.style("display", "block")
+                .style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY) + "px")
+                .html(`<strong>${d.id}</strong><br>Type: ${d.type}<br>Projects: ${d.projects}<br>Avg Rating: ${d.avgRating}`);
+        }
+
+        function handleMouseOut() {
+            tooltip.style("display", "none");
+        }
+
+        // Drag functions
+        function dragstarted(event, d) {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+        }
+
+        function dragged(event, d) {
+            d.fx = event.x;
+            d.fy = event.y;
+        }
+
+        function dragended(event, d) {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+        }
+
+        // Year slider animation
+        const yearSlider = d3.select("#yearSlider");
+        const yearDisplay = d3.select("#yearDisplay");
+
+        yearSlider.on("input", function() {
+            const currentYear = +this.value;
+            yearDisplay.text(currentYear);
+            node.attr("opacity", d => d.firstYear <= currentYear ? 0.8 : 0);
+            link.attr("opacity", d => d.year <= currentYear ? 0.5 : 0);
+        });
+
+        // Simulation tick
+        simulation.on("tick", () => {
+            link
+                .attr("x1", d => d.source.x)
+                .attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x)
+                .attr("y2", d => d.target.y);
+            node
+                .attr("cx", d => d.x)
+                .attr("cy", d => d.y);
+        });
+
+        // Resize handler
+        window.addEventListener("resize", () => {
+            const newWidth = window.innerWidth;
+            const newHeight = window.innerHeight;
+            svg.attr("width", newWidth).attr("height", newHeight);
+            simulation.force("center", d3.forceCenter(newWidth / 2, newHeight / 2));
+            simulation.alpha(0.3).restart();
+        });
+    </script>
+</body>
+</html>

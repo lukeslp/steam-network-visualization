@@ -1,0 +1,2608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/x-icon" href="/assets/images/favicon.ico">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Steam Universe: 80,000+ Games Visualized</title>
+    <meta name="description" content="Interactive visualization of 80,000+ Steam games from 2005-2025. Year vs approval scatter with co-review network overlay showing how top games are connected by shared players.">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        header {
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            z-index: 10;
+            padding: 16px 24px;
+            background: linear-gradient(to bottom, rgba(10,10,10,0.95) 0%, rgba(10,10,10,0.6) 80%, transparent 100%);
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        header * { pointer-events: auto; }
+        h1 { font-size: 1.3rem; font-weight: 700; color: #fff; white-space: nowrap; }
+        .subtitle { font-size: 0.8rem; color: #888; white-space: nowrap; }
+
+        /* ── HELP ── */
+        .help-icon {
+            position: absolute;
+            top: 16px; right: 16px;
+            z-index: 10;
+            width: 28px; height: 28px;
+            border-radius: 50%;
+            background: rgba(20, 20, 20, 0.8);
+            border: 1px solid #444;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            font-size: 13px; color: #888;
+            transition: all 0.2s;
+        }
+        .help-icon:hover { background: rgba(40, 40, 40, 0.9); color: #fff; }
+        .help-menu {
+            position: absolute;
+            top: 50px; right: 16px;
+            z-index: 20;
+            background: rgba(20, 20, 20, 0.95);
+            border: 1px solid #444;
+            border-radius: 6px;
+            padding: 12px 16px;
+            font-size: 0.75rem;
+            line-height: 1.6;
+            display: none;
+            backdrop-filter: blur(8px);
+        }
+        .help-menu.active { display: block; }
+        .help-menu a { color: #33BBEE; text-decoration: none; display: block; margin: 3px 0; }
+        .help-menu a:hover { color: #fff; }
+
+
+        /* ── LEGEND (collapsible) ── */
+        .legend {
+            background: rgba(20, 20, 20, 0.92);
+            border: 1px solid #333;
+            border-radius: 6px;
+            font-size: 0.7rem;
+            backdrop-filter: blur(8px);
+            transition: all 0.3s ease;
+        }
+        .legend-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 8px 12px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .legend-title { font-weight: 600; color: #ccc; text-transform: uppercase; letter-spacing: 0.5px; font-size: 0.65rem; }
+        .panel-toggle {
+            background: none; border: none; color: #888;
+            font-size: 16px; cursor: pointer; padding: 0 2px;
+            transition: transform 0.3s;
+            line-height: 1;
+        }
+        .panel-toggle:hover { color: #fff; }
+        .legend.collapsed .panel-toggle { transform: rotate(180deg); }
+        .legend-body {
+            padding: 0 12px 10px;
+            overflow: hidden;
+            max-height: 500px;
+            transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.2s ease;
+            opacity: 1;
+        }
+        .legend.collapsed .legend-body { max-height: 0; padding: 0 12px; opacity: 0; }
+
+        /* ── CONTROLS PANEL (merged filter + legend) ── */
+        .controls-panel {
+            background: rgba(20, 20, 20, 0.92);
+            border: 1px solid #333;
+            border-radius: 5px;
+            font-size: 0.58rem;
+            backdrop-filter: blur(8px);
+            transition: all 0.3s ease;
+        }
+        .controls-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 4px 6px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .controls-title {
+            font-weight: 600; color: #ccc; text-transform: uppercase;
+            letter-spacing: 0.5px; font-size: 0.55rem;
+        }
+        .controls-body {
+            padding: 0 6px 4px;
+            overflow: hidden;
+            max-height: 800px;
+            transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.2s ease;
+            opacity: 1;
+        }
+        .controls-panel.collapsed .controls-body {
+            max-height: 0; padding: 0 6px; opacity: 0;
+        }
+        .controls-panel.collapsed .panel-toggle {
+            transform: rotate(180deg);
+        }
+        .controls-section {
+            padding-bottom: 3px;
+            margin-bottom: 3px;
+            border-bottom: 1px solid #222;
+        }
+        .controls-section:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+        .controls-section-label {
+            font-size: 0.5rem;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 2px;
+            display: block;
+        }
+        .controls-section-row {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 2px;
+        }
+        .controls-section-row .controls-section-label { margin-bottom: 0; }
+        .controls-section-value {
+            font-size: 0.5rem; color: #666; font-variant-numeric: tabular-nums;
+        }
+        .controls-section-value.active { color: #33BBEE; }
+
+        /* ── UNIFIED PILL SYSTEM ── */
+        .pill-row { display: flex; gap: 3px; flex-wrap: wrap; }
+        .pill {
+            padding: 2px 7px;
+            border: 1px solid #333; border-radius: 12px;
+            background: transparent; color: #666;
+            font-size: 0.55rem; cursor: pointer;
+            transition: all 0.15s; font-family: inherit;
+            white-space: nowrap; line-height: 1.4;
+        }
+        .pill:hover { border-color: #555; color: #aaa; }
+        .pill.active { border-color: #33BBEE; color: #33BBEE; background: rgba(51, 187, 238, 0.08); }
+        .pill.active-alt { border-color: #EE7733; color: #EE7733; background: rgba(238, 119, 51, 0.08); }
+
+        /* Legacy compat — map old classes to unified pill */
+        .color-mode { display: flex; gap: 3px; flex-wrap: wrap; }
+        .color-pill {
+            padding: 2px 7px;
+            border: 1px solid #333; border-radius: 12px;
+            background: transparent; color: #666;
+            font-size: 0.55rem; cursor: pointer;
+            transition: all 0.15s; font-family: inherit;
+            white-space: nowrap; line-height: 1.4;
+        }
+        .color-pill:hover { border-color: #555; color: #aaa; }
+        .color-pill.active { border-color: #33BBEE; color: #33BBEE; background: rgba(51, 187, 238, 0.08); }
+
+        .genre-pill {
+            padding: 2px 7px;
+            border: 1px solid #333; border-radius: 12px;
+            background: transparent; color: #666;
+            font-size: 0.55rem; cursor: pointer;
+            transition: all 0.15s; font-family: inherit;
+            white-space: nowrap; line-height: 1.4;
+        }
+        .genre-pill:hover { border-color: #555; color: #aaa; }
+        .genre-pill.active { border-color: #EE7733; color: #EE7733; background: rgba(238, 119, 51, 0.08); }
+
+        .legend-item { display: flex; align-items: center; gap: 3px; margin-bottom: 0; color: #aaa; font-size: 0.5rem; }
+        .legend-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+        .legend-gradient { width: 100%; height: 5px; border-radius: 3px; margin: 1px 0; }
+        .legend-gradient-labels { display: flex; justify-content: space-between; font-size: 0.5rem; color: #666; }
+        .legend-note { color: #666; font-size: 0.48rem; margin-top: 2px; border-top: 1px solid #333; padding-top: 2px; }
+
+        /* ── INFO PANEL (pinnable bottom tray) ── */
+        .info-panel {
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            z-index: 30;
+            background: rgba(16, 16, 16, 0.95);
+            border-top: 1px solid #444;
+            border-radius: 12px 12px 0 0;
+            font-size: 0.7rem;
+            max-height: 25vh;
+            overflow-y: auto;
+            display: none;
+            backdrop-filter: blur(12px);
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.6);
+            transform: translateY(100%);
+            transition: transform 0.25s ease, border-color 0.2s;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: env(safe-area-inset-bottom, 0px);
+        }
+        .info-panel.visible { display: block; transform: translateY(0); }
+        .info-panel.pinned { border-color: #33BBEE; }
+        .info-handle {
+            display: block; width: 36px; height: 4px;
+            background: #555; border-radius: 2px;
+            margin: 6px auto 4px;
+            cursor: grab;
+        }
+
+        .info-header { display: flex; align-items: center; justify-content: space-between; padding: 0 12px 4px; gap: 8px; }
+        .info-title { font-size: 0.85rem; font-weight: 700; color: #fff; line-height: 1.2; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .info-controls { display: flex; gap: 4px; flex-shrink: 0; }
+        .info-btn {
+            width: 24px; height: 24px; border-radius: 4px;
+            background: rgba(255,255,255,0.08); border: 1px solid #444;
+            color: #888; font-size: 12px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.15s;
+        }
+        .info-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+        .info-btn.active { color: #33BBEE; border-color: #33BBEE; }
+
+        /* Tray content - horizontal flow */
+        .info-tray-content {
+            display: flex;
+            gap: 12px;
+            padding: 0 12px 8px;
+            flex-wrap: wrap;
+            align-items: flex-start;
+        }
+        .info-tray-stats {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+            flex: 1;
+            min-width: 200px;
+        }
+        .info-stat {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1px;
+        }
+        .info-stat-label { color: #666; font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.5px; }
+        .info-stat-value { color: #fff; font-weight: 600; font-size: 0.7rem; }
+        .info-rating-bar { height: 3px; border-radius: 2px; width: 60px; background: #222; overflow: hidden; display: inline-block; vertical-align: middle; margin-left: 4px; }
+        .info-rating-fill { height: 100%; border-radius: 2px; }
+        .info-tags-section {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+            flex: 1;
+            min-width: 150px;
+        }
+        .info-tag {
+            padding: 2px 6px; border-radius: 3px; font-size: 0.55rem; font-weight: 600;
+            background: rgba(255,255,255,0.08); color: #aaa;
+            white-space: nowrap;
+        }
+        .info-tag.genre { background: rgba(51, 187, 238, 0.12); color: #33BBEE; }
+
+        .info-connections {
+            display: flex; gap: 4px; flex-wrap: wrap;
+            padding: 4px 12px 8px;
+            border-top: 1px solid #333;
+            max-height: 80px;
+            overflow-y: auto;
+        }
+        .info-connections-title {
+            font-weight: 600; color: #888; font-size: 0.55rem;
+            width: 100%; margin-bottom: 2px;
+        }
+        .connection-item {
+            color: #888; font-size: 0.6rem;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            cursor: pointer; padding: 2px 6px; border-radius: 3px;
+            background: rgba(255,255,255,0.04);
+            transition: background 0.15s;
+            max-width: 180px;
+        }
+        .connection-item:hover { background: rgba(51, 187, 238, 0.15); color: #ccc; }
+        .info-hint { display: none; }
+
+        canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
+        canvas.hidden-tab { display: none; }
+
+        /* ── TAB BAR ── */
+        .tab-bar {
+            position: absolute;
+            top: 48px; left: 50%;
+            transform: translateX(-50%);
+            z-index: 12;
+            display: flex; gap: 2px;
+            background: rgba(15, 15, 15, 0.85);
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 3px;
+            backdrop-filter: blur(12px);
+        }
+        .tab-btn {
+            padding: 6px 11px;
+            border: none; border-radius: 6px;
+            background: transparent;
+            color: #777; font-size: 0.72rem; font-weight: 500;
+            cursor: pointer; transition: all 0.2s;
+            font-family: inherit;
+            white-space: nowrap;
+        }
+        .tab-btn:hover { color: #ccc; background: rgba(255,255,255,0.05); }
+        .tab-btn.active { color: #fff; background: rgba(51, 187, 238, 0.15); }
+
+        footer {
+            position: absolute;
+            bottom: 16px; right: 16px;
+            z-index: 10;
+            font-size: 0.7rem; color: #555;
+        }
+        footer a { color: #33BBEE; text-decoration: none; }
+        footer a:hover { text-decoration: underline; }
+
+        .loading {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 20; text-align: center; color: #888;
+        }
+        .loading-title { font-size: 1.2rem; color: #fff; margin-bottom: 8px; }
+        .loading-step { font-size: 0.75rem; color: #999; margin-bottom: 10px; min-height: 1.1em; }
+        .loading-bar { width: 260px; height: 3px; background: #333; border-radius: 2px; overflow: hidden; margin: 0 auto; }
+        .loading-fill { width: 0%; height: 100%; background: #33BBEE; transition: width 0.3s; }
+        .loading-bytes { font-size: 0.65rem; color: #666; margin-top: 6px; }
+
+        /* ── SEARCH (restyled) ── */
+        .search-wrap {
+            position: absolute; top: 56px; left: 24px; z-index: 15;
+            display: flex; align-items: center;
+        }
+        .search-toggle {
+            display: none; /* Hidden on desktop, shown on mobile */
+            width: 40px; height: 40px;
+            background: rgba(15, 15, 15, 0.85); border: 1px solid #333;
+            border-radius: 8px; cursor: pointer;
+            align-items: center; justify-content: center;
+            backdrop-filter: blur(12px);
+            transition: all 0.2s;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .search-toggle:hover { border-color: #555; }
+        .search-toggle svg { width: 16px; height: 16px; stroke: #888; fill: none; stroke-width: 2; stroke-linecap: round; }
+        .search-toggle:hover svg { stroke: #ccc; }
+        .search-field {
+            position: relative;
+            transition: width 0.25s ease, opacity 0.2s ease;
+        }
+        .search-input {
+            width: 260px; padding: 10px 14px 10px 36px;
+            background: rgba(15, 15, 15, 0.85); border: 1px solid #333;
+            border-radius: 8px; color: #e0e0e0; font-size: 0.8rem;
+            backdrop-filter: blur(12px);
+            font-family: inherit;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .search-input::placeholder { color: #555; }
+        .search-input:focus {
+            outline: none; border-color: #33BBEE;
+            box-shadow: 0 0 0 1px rgba(51, 187, 238, 0.2);
+        }
+        .search-icon {
+            position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+            pointer-events: none;
+        }
+        .search-icon svg { width: 14px; height: 14px; stroke: #555; fill: none; stroke-width: 2; stroke-linecap: round; }
+        .search-input:focus ~ .search-icon svg,
+        .search-field:focus-within .search-icon svg { stroke: #33BBEE; }
+        .search-results {
+            position: absolute; top: 100%; left: 0;
+            width: 100%; max-height: 280px; overflow-y: auto;
+            background: rgba(15, 15, 15, 0.95); border: 1px solid #333;
+            border-radius: 8px; margin-top: 4px;
+            display: none; backdrop-filter: blur(12px);
+            z-index: 20;
+        }
+        .search-results.visible { display: block; }
+        .search-result {
+            padding: 10px 14px; cursor: pointer;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            font-size: 0.8rem; transition: background 0.15s;
+        }
+        .search-result:last-child { border-bottom: none; }
+        .search-result:hover { background: rgba(51, 187, 238, 0.08); }
+        .search-result-title { color: #e0e0e0; font-weight: 500; }
+        .search-result-meta { color: #666; font-size: 0.7rem; margin-top: 2px; }
+
+        /* ── SIDEBAR STACK (filter panel + legend) ── */
+        .sidebar-stack {
+            position: absolute;
+            bottom: 8px; left: 8px;
+            z-index: 10;
+            display: flex; flex-direction: column; gap: 3px;
+            max-width: 195px;
+        }
+
+        /* ── FILTER PANEL (dual-range sliders) ── */
+        .filter-panel {
+            background: rgba(20, 20, 20, 0.92);
+            border: 1px solid #333;
+            border-radius: 6px;
+            font-size: 0.7rem;
+            backdrop-filter: blur(8px);
+            transition: all 0.3s ease;
+        }
+        .filter-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 8px 12px;
+            cursor: pointer; user-select: none;
+        }
+        .filter-title { font-size: 0.7rem; color: #ccc; font-weight: 600; }
+        .filter-count { font-size: 0.6rem; color: #33BBEE; margin-left: auto; margin-right: 8px; }
+        .filter-body {
+            padding: 0 12px 10px;
+            max-height: 400px;
+            overflow: hidden;
+            transition: max-height 0.3s ease, padding 0.3s ease;
+        }
+        .filter-panel.collapsed .filter-body {
+            max-height: 0; padding-top: 0; padding-bottom: 0;
+        }
+        .filter-row { margin-bottom: 1px; }
+        .filter-row:last-child { margin-bottom: 0; }
+        .filter-row-label {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 0; line-height: 1.2;
+        }
+        .filter-row-label span:first-child {
+            font-size: 0.5rem; color: #666; text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .filter-value { font-size: 0.5rem; color: #aaa; font-variant-numeric: tabular-nums; }
+        .filter-value.active { color: #33BBEE; }
+        .filter-actions {
+            display: flex; justify-content: flex-end;
+            padding-top: 2px; border-top: 1px solid #222; margin-top: 1px;
+        }
+        .filter-reset {
+            padding: 2px 7px; border: 1px solid #333;
+            border-radius: 12px; background: transparent;
+            color: #666; font-size: 0.5rem; cursor: pointer;
+            transition: all 0.15s; font-family: inherit;
+            white-space: nowrap; line-height: 1.4;
+        }
+        .filter-reset:hover { color: #ccc; border-color: #555; }
+
+        /* ── DUAL-RANGE SLIDER ── */
+        .range-slider {
+            position: relative; height: 20px;
+        }
+        .range-track {
+            position: absolute; left: 0; right: 0;
+            height: 2px; top: 50%; transform: translateY(-50%);
+            background: #333; border-radius: 2px;
+            pointer-events: none;
+        }
+        .range-fill {
+            position: absolute;
+            height: 2px; top: 50%; transform: translateY(-50%);
+            background: rgba(51, 187, 238, 0.35); border-radius: 2px;
+            pointer-events: none;
+            transition: left 0.05s, right 0.05s;
+        }
+        .range-slider input[type="range"] {
+            position: absolute; width: 100%;
+            top: 50%; transform: translateY(-50%);
+            -webkit-appearance: none; appearance: none;
+            background: transparent;
+            pointer-events: none;
+            margin: 0; padding: 0; height: 2px;
+        }
+        .range-slider input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 12px; width: 12px;
+            border-radius: 50%;
+            background: #33BBEE;
+            border: 1px solid #1a1a1a;
+            cursor: pointer;
+            pointer-events: auto;
+            position: relative; z-index: 2;
+            box-shadow: 0 0 4px rgba(51,187,238,0.4);
+        }
+        .range-slider input[type="range"]::-moz-range-thumb {
+            height: 12px; width: 12px;
+            border-radius: 50%;
+            background: #33BBEE;
+            border: 1px solid #1a1a1a;
+            cursor: pointer;
+            pointer-events: auto;
+            box-shadow: 0 0 4px rgba(51,187,238,0.4);
+        }
+        .range-slider input[type="range"]::-webkit-slider-runnable-track {
+            background: transparent;
+        }
+        .range-slider input[type="range"]::-moz-range-track {
+            background: transparent; border: none;
+        }
+
+        @media (max-width: 768px) {
+            header { flex-wrap: wrap; padding: 10px 12px; gap: 8px; }
+            h1 { font-size: 1rem; }
+            .subtitle { display: none; }
+            .tab-bar { top: 38px; gap: 1px; padding: 2px; }
+            .tab-btn { padding: 8px 10px; font-size: 0.7rem; min-height: 36px; }
+            .search-wrap { top: 82px; left: 12px; z-index: 15; }
+            .search-toggle { display: flex; }
+            .search-field { width: 0; opacity: 0; overflow: hidden; pointer-events: none; }
+            .search-field.expanded { width: 220px; opacity: 1; overflow: visible; pointer-events: auto; margin-left: 6px; }
+            .search-field.expanded .search-input { width: 100%; font-size: 16px; min-height: 44px; }
+            .search-results { max-height: 50vh; }
+            .search-result { padding: 12px 14px; min-height: 44px; }
+            .sidebar-stack { bottom: 4px; left: 4px; max-width: 150px; z-index: 10; }
+            .controls-panel.collapsed .controls-body { max-height: 0; padding: 0 12px; }
+            .range-slider input[type="range"]::-webkit-slider-thumb { height: 18px; width: 18px; }
+            .range-slider input[type="range"]::-moz-range-thumb { height: 18px; width: 18px; }
+            .range-slider { height: 28px; }
+            .color-pill, .genre-pill, .pill { font-size: 0.55rem; padding: 5px 7px; min-height: 32px; display: flex; align-items: center; justify-content: center; }
+
+            /* Info tray adjustments for mobile */
+            .info-panel {
+                max-height: 30vh;
+                border-radius: 12px 12px 0 0;
+                padding-bottom: max(8px, env(safe-area-inset-bottom, 8px));
+            }
+            .info-panel .info-header { padding: 0 12px 4px; }
+            .info-panel .info-title { font-size: 0.85rem; }
+            .info-panel .info-btn { width: 32px; height: 32px; font-size: 14px; }
+            .info-tray-content { flex-direction: column; gap: 6px; }
+            .info-tray-stats { gap: 6px; }
+            .info-connections { max-height: 100px; }
+            .connection-item { font-size: 0.65rem; min-height: 28px; display: flex; align-items: center; }
+
+            /* Hide sidebar when info is open */
+            .legend.mobile-hidden { opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+            .controls-panel.mobile-hidden { opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+            .help-icon { right: 16px; width: 40px; height: 40px; font-size: 18px; }
+            footer { bottom: 8px; right: 8px; font-size: 0.65rem; }
+            .filter-reset { min-height: 32px; padding: 5px 7px; font-size: 0.55rem; }
+        }
+        @media (max-width: 480px) {
+            .tab-bar { gap: 0; }
+            .tab-btn { padding: 8px 8px; font-size: 0.65rem; }
+            .sidebar-stack { max-width: 140px; bottom: 4px; left: 4px; }
+            .controls-panel { font-size: 0.65rem; }
+            .color-mode, .pill-row { gap: 3px; }
+            .color-pill, .genre-pill, .pill { padding: 4px 6px; font-size: 0.5rem; min-height: 28px; }
+            .info-panel { max-height: 30vh; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Steam Universe</h1>
+        <span class="subtitle" id="subtitle">80,000+ games &middot; player trails across the full catalog</span>
+    </header>
+
+    <div class="help-icon" id="helpIcon" onclick="document.getElementById('helpMenu').classList.toggle('active')">?</div>
+    <div class="help-menu" id="helpMenu">
+        <div style="color:#ccc; margin-bottom:6px; font-weight:600;">Controls</div>
+        <div style="color:#888; margin-bottom:3px;">Scroll to zoom, drag to pan</div>
+        <div style="color:#888; margin-bottom:3px;">Click a game to pin its details</div>
+        <div style="color:#888; margin-bottom:8px;">Search by title in the search bar</div>
+        <a href="https://lukesteuber.com" target="_blank">lukesteuber.com</a>
+        <a href="https://dr.eamer.dev" target="_blank">dr.eamer.dev</a>
+    </div>
+
+    <div class="search-wrap" id="search-wrap">
+        <button class="search-toggle" id="search-toggle" aria-label="Search">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </button>
+        <div class="search-field" id="search-field">
+            <input type="text" class="search-input" id="search" placeholder="Search 80,000+ games..." autocomplete="off">
+            <span class="search-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+            <div class="search-results" id="search-results"></div>
+        </div>
+    </div>
+
+    <div class="tab-bar" id="tab-bar">
+        <button class="tab-btn active" data-tab="scatter">Universe</button>
+        <button class="tab-btn" data-tab="chord">Chord</button>
+        <button class="tab-btn" data-tab="force">Network</button>
+        <button class="tab-btn" data-tab="timeline">Timeline</button>
+    </div>
+
+    <canvas id="canvas"></canvas>
+    <canvas id="canvas-chord" class="hidden-tab"></canvas>
+    <canvas id="canvas-force" class="hidden-tab"></canvas>
+    <canvas id="canvas-timeline" class="hidden-tab"></canvas>
+
+    <div class="loading" id="loading">
+        <div class="loading-title">Loading 82,000+ games (24 MB)</div>
+        <div class="loading-step" id="loading-step"></div>
+        <div class="loading-bar"><div class="loading-fill" id="loading-fill"></div></div>
+        <div class="loading-bytes" id="loading-bytes"></div>
+        <div class="loading-detail" id="loading-detail" style="font-size:0.6rem;color:#555;margin-top:4px;min-height:1em;"></div>
+    </div>
+
+    <div class="sidebar-stack" id="sidebar-stack">
+    <div class="controls-panel collapsed" id="controls-panel">
+        <div class="controls-header" id="controls-header" onclick="toggleLegend()">
+            <span class="controls-title">Controls</span>
+            <span class="filter-count" id="filter-count"></span>
+            <button class="panel-toggle" id="controls-toggle">&#x25BC;</button>
+        </div>
+        <div class="controls-body" id="controls-body">
+            <!-- Filters section -->
+            <div class="controls-section">
+                <div class="controls-section-label">Filters</div>
+                <div class="filter-row">
+                    <div class="filter-row-label">
+                        <span>Year</span>
+                        <span class="filter-value" id="fv-year">2005 – 2025</span>
+                    </div>
+                    <div class="range-slider">
+                        <div class="range-track"></div>
+                        <div class="range-fill" id="ff-year"></div>
+                        <input type="range" min="2005" max="2025" value="2005" step="1" id="fr-year-min">
+                        <input type="range" min="2005" max="2025" value="2025" step="1" id="fr-year-max">
+                    </div>
+                </div>
+                <div class="filter-row">
+                    <div class="filter-row-label">
+                        <span>Rating</span>
+                        <span class="filter-value" id="fv-rating">0% – 100%</span>
+                    </div>
+                    <div class="range-slider">
+                        <div class="range-track"></div>
+                        <div class="range-fill" id="ff-rating"></div>
+                        <input type="range" min="0" max="100" value="0" step="1" id="fr-rating-min">
+                        <input type="range" min="0" max="100" value="100" step="1" id="fr-rating-max">
+                    </div>
+                </div>
+                <div class="filter-row">
+                    <div class="filter-row-label">
+                        <span>Price</span>
+                        <span class="filter-value" id="fv-price">$0 – $70+</span>
+                    </div>
+                    <div class="range-slider">
+                        <div class="range-track"></div>
+                        <div class="range-fill" id="ff-price"></div>
+                        <input type="range" min="0" max="70" value="0" step="1" id="fr-price-min">
+                        <input type="range" min="0" max="70" value="70" step="1" id="fr-price-max">
+                    </div>
+                </div>
+                <div class="filter-row">
+                    <div class="filter-row-label">
+                        <span>Reviews</span>
+                        <span class="filter-value" id="fv-reviews">1 – 10M+</span>
+                    </div>
+                    <div class="range-slider">
+                        <div class="range-track"></div>
+                        <div class="range-fill" id="ff-reviews"></div>
+                        <input type="range" min="0" max="70" value="0" step="1" id="fr-reviews-min">
+                        <input type="range" min="0" max="70" value="70" step="1" id="fr-reviews-max">
+                    </div>
+                </div>
+                <div class="filter-actions">
+                    <button class="filter-reset" id="filter-reset">Reset</button>
+                </div>
+            </div>
+            <!-- Genre filter section -->
+            <div class="controls-section">
+                <div class="controls-section-row">
+                    <span class="controls-section-label">Genres</span>
+                    <span class="controls-section-value" id="genre-count">All</span>
+                </div>
+                <div class="pill-row" id="genre-filters"></div>
+            </div>
+            <!-- Density section (Universe only) -->
+            <div class="controls-section" id="density-section">
+                <div class="controls-section-row">
+                    <span class="controls-section-label">Density</span>
+                    <span class="controls-section-value active" id="density-label">15%</span>
+                </div>
+                <div class="range-slider">
+                    <div class="range-track"></div>
+                    <div class="range-fill" id="density-fill" style="left:0; width:15%;"></div>
+                    <input type="range" id="density-slider" min="0" max="100" value="15">
+                </div>
+            </div>
+            <!-- Legend section (color mode + legend items) -->
+            <div class="controls-section" id="legend-section">
+                <div class="color-mode" id="color-mode"></div>
+                <div id="legend-items"></div>
+                <div class="legend-note" id="legend-note"></div>
+            </div>
+            <!-- Network section (visible only on force tab) -->
+            <div class="controls-section" id="network-section" style="display:none;">
+                <span class="controls-section-label">Group by</span>
+                <div class="pill-row" id="net-group-mode">
+                    <button class="pill active" data-mode="genre">Genre</button>
+                    <button class="pill" data-mode="community">Community</button>
+                </div>
+                <div id="net-group-legend" style="margin-top:3px;font-size:0.5rem;color:#666;"></div>
+                <span class="controls-section-label" style="margin-top:3px;">Size by</span>
+                <div class="pill-row" id="net-size-mode">
+                    <button class="pill active" data-mode="reviews">Reviews</button>
+                    <button class="pill" data-mode="rating">Rating</button>
+                    <button class="pill" data-mode="price">Price</button>
+                    <button class="pill" data-mode="connections">Connections</button>
+                </div>
+                <span class="controls-section-label" style="margin-top:3px;">Color by</span>
+                <div class="pill-row" id="net-color-mode">
+                    <button class="pill active" data-mode="rating">Rating</button>
+                    <button class="pill" data-mode="price">Price</button>
+                    <button class="pill" data-mode="year">Year</button>
+                    <button class="pill" data-mode="reviews">Reviews</button>
+                </div>
+                <div class="legend-note" id="net-legend-note"></div>
+                <span class="controls-section-label" style="margin-top:3px;">Layout</span>
+                <div class="pill-row" id="net-layout-mode">
+                    <button class="pill active" data-mode="default">Default</button>
+                    <button class="pill" data-mode="tight">Tight</button>
+                    <button class="pill" data-mode="spread">Spread</button>
+                    <button class="pill" data-mode="clustered">Clustered</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div> <!-- /sidebar-stack -->
+
+    <div class="info-panel" id="info-panel">
+        <div class="info-handle" aria-hidden="true"></div>
+        <div class="info-header">
+            <div class="info-title" id="info-title"></div>
+            <div class="info-controls">
+                <button class="info-btn" id="info-pin" title="Pin this panel">&#x1F4CC;</button>
+                <button class="info-btn" id="info-close" title="Close">&times;</button>
+            </div>
+        </div>
+        <div id="info-body"></div>
+    </div>
+
+    <footer>
+        Data: Steam Store / Kaggle | Viz: <a href="https://lukesteuber.com">Luke Steuber</a>
+    </footer>
+
+    <script>
+    (function() {
+        'use strict';
+
+        // ═══════════════════════════════════
+        // CONSTANTS
+        // ═══════════════════════════════════
+        // Colorblind-safe "Gaming Bright" palette (Wong + Tol adapted for dark bg)
+        const RATING_COLORS = [
+            '#00CCFF', '#0088FF', '#00CC66', '#FFEE00',
+            '#FF8800', '#FF2200', '#FF0066', '#DD0000', '#AA0044',
+        ];
+        const RATING_LABELS = [
+            'Overwhelmingly Positive','Very Positive','Mostly Positive','Positive',
+            'Mixed','Mostly Negative','Negative','Very Negative','Overwhelmingly Negative'
+        ];
+        const PRICE_COLORS = ['#FFFFFF', '#00DDAA', '#FFEE00', '#FF8800', '#FF0000'];
+        const PRICE_LABELS = ['Free', 'Under $5', '$5\u2013$15', '$15\u2013$30', '$30+'];
+
+        // ═══════════════════════════════════
+        // STATE
+        // ═══════════════════════════════════
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const infoPanel = document.getElementById('info-panel');
+        const loadingEl = document.getElementById('loading');
+        const loadingFill = document.getElementById('loading-fill');
+        const loadingStep = document.getElementById('loading-step');
+        const loadingBytes = document.getElementById('loading-bytes');
+        const loadingDetail = document.getElementById('loading-detail');
+        const _loadStart = performance.now();
+
+        function setLoadProgress(pct, step, bytes, detail) {
+            loadingFill.style.width = pct + '%';
+            if (step) loadingStep.textContent = step;
+            if (bytes !== undefined) loadingBytes.textContent = bytes || '';
+            if (detail !== undefined) loadingDetail.textContent = detail || '';
+        }
+
+        // Known file sizes for accurate progress when Content-Length unavailable
+        const KNOWN_SIZES = {
+            'steam_all_2005.json': 6.2 * 1048576,
+            'steam_network.json': 18 * 1048576,
+        };
+
+        async function fetchWithProgress(url, label, startPct, endPct) {
+            const resp = await fetch(url);
+            const clHeader = +resp.headers.get('Content-Length') || 0;
+            const fileName = url.split('?')[0];
+            const total = clHeader || KNOWN_SIZES[fileName] || 0;
+
+            if (!resp.body) {
+                setLoadProgress(endPct, label, '', 'No streaming — waiting...');
+                return await (await fetch(url)).json();
+            }
+
+            const reader = resp.body.getReader();
+            const chunks = [];
+            let received = 0;
+            const fetchStart = performance.now();
+            let lastUpdate = 0;
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                chunks.push(value);
+                received += value.length;
+
+                const now = performance.now();
+                if (now - lastUpdate < 150) continue; // Throttle UI updates
+                lastUpdate = now;
+
+                const elapsedSec = (now - fetchStart) / 1000;
+                const speed = received / elapsedSec;
+                const speedStr = speed > 1048576
+                    ? (speed / 1048576).toFixed(1) + ' MB/s'
+                    : (speed / 1024).toFixed(0) + ' KB/s';
+                const mb = (received / 1048576).toFixed(1);
+
+                if (total) {
+                    const pct = startPct + (received / total) * (endPct - startPct);
+                    const totalMb = (total / 1048576).toFixed(1);
+                    const remaining = (total - received) / speed;
+                    const etaStr = remaining > 60
+                        ? Math.ceil(remaining / 60) + 'min'
+                        : Math.ceil(remaining) + 's';
+                    setLoadProgress(Math.round(pct), label,
+                        `${mb} / ${totalMb} MB`,
+                        `${speedStr} — ~${etaStr} remaining`);
+                } else {
+                    const pct = startPct + Math.min(0.9, received / (10 * 1048576)) * (endPct - startPct);
+                    setLoadProgress(Math.round(pct), label,
+                        `${mb} MB downloaded`,
+                        `${speedStr}`);
+                }
+            }
+
+            const totalElapsed = ((performance.now() - fetchStart) / 1000).toFixed(1);
+            const finalMb = (received / 1048576).toFixed(1);
+            setLoadProgress(endPct, label, `${finalMb} MB in ${totalElapsed}s`);
+
+            const buf = new Uint8Array(received);
+            let pos = 0;
+            for (const chunk of chunks) { buf.set(chunk, pos); pos += chunk.length; }
+            const text = new TextDecoder().decode(buf);
+            return JSON.parse(text);
+        }
+
+        let width, height, dpr;
+        let transform = d3.zoomIdentity;
+        let allGames = null;
+        let gamesByReviews = []; // Pre-sorted for label rendering
+        let ratingNames = null;
+        let networkEdges = [];
+        let gameEdgeIndex = new Map(); // game → [edge, edge, ...] for O(degree) highlight lookup
+        let titleToGameMap = new Map(); // persistent title → game for fast lookup
+        let hoveredItem = null;
+        let pinnedGame = null;
+        let colorMode = 'rating';
+        let quadtree = null;
+        let xScale, yScale, sizeScale;
+        let zoomBehavior = null;
+        let edgeDensity = 0.15; // 0=sparse, 0.5=medium, 1=dense
+        let genreNames = [];
+        let tagNames = [];
+        let activeGenre = null; // null = show all, or genre index
+        let isInteracting = false;  // True during active pan/zoom
+        let interactionTimer = null;
+        let renderRAF = null;       // requestAnimationFrame handle
+
+        const yearColorScale = d3.scaleSequential(d3.interpolateTurbo).domain([2005, 2025]);
+        const reviewColorScale = d3.scaleSequential(d3.interpolateInferno).domain([0, 6.5]);
+
+        // ═══════════════════════════════════
+        // COLOR MODE
+        // ═══════════════════════════════════
+        function getGameColor(g) {
+            switch (colorMode) {
+                case 'price':
+                    if (g[4] === 0) return PRICE_COLORS[0];
+                    if (g[4] < 5) return PRICE_COLORS[1];
+                    if (g[4] < 15) return PRICE_COLORS[2];
+                    if (g[4] < 30) return PRICE_COLORS[3];
+                    return PRICE_COLORS[4];
+                case 'year':
+                    return yearColorScale(g[1]);
+                case 'reviews':
+                    return reviewColorScale(Math.log10(Math.max(1, g[3])));
+                default:
+                    return RATING_COLORS[g[5]] || '#888';
+            }
+        }
+
+        function recolorAll() {
+            if (!allGames) return;
+            allGames.forEach(g => { g._color = getGameColor(g); });
+            render();
+        }
+
+        function setColorMode(mode) {
+            colorMode = mode;
+            document.querySelectorAll('#color-mode .color-pill, #net-color-mode .pill').forEach(p => p.classList.toggle('active', p.dataset.mode === mode));
+            recolorAll();
+            updateLegendItems();
+            // Notify active view module of genre filter change
+            const activeTab = window._steamActiveTab ? window._steamActiveTab() : 'scatter';
+            if (activeTab !== 'scatter' && window._steamViews && window._steamViews[activeTab] && window._steamViews[activeTab].onFilterChange) {
+                window._steamViews[activeTab].onFilterChange();
+            }
+        }
+
+        // ═══════════════════════════════════
+        // RESIZE
+        // ═══════════════════════════════════
+        function resize() {
+            dpr = window.devicePixelRatio || 1;
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width * dpr;
+            canvas.height = height * dpr;
+            canvas.style.width = width + 'px';
+            canvas.style.height = height + 'px';
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            if (allGames) buildScatter();
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // ═══════════════════════════════════
+        // DATA LOADING
+        // ═══════════════════════════════════
+        const _v = 'v=24';  // Bump to bust browser cache after data changes
+
+        (async () => {
+            const t0 = performance.now();
+            const elapsed = () => ((performance.now() - t0) / 1000).toFixed(1) + 's';
+
+            setLoadProgress(2, 'Downloading game catalog (6.2 MB)...', '0 / 6.2 MB', 'File 1 of 2 — ~13.5 MB total');
+            const allData = await fetchWithProgress('steam_all_2005.json?' + _v, 'Downloading game catalog (6.2 MB)...', 2, 38);
+
+            setLoadProgress(40, 'Downloading network data (18 MB)...', '0 / 18 MB', 'File 2 of 2');
+            const netData = await fetchWithProgress('steam_network.json?' + _v, 'Downloading network data (18 MB)...', 40, 70);
+
+            setLoadProgress(72, 'Parsing ' + allData.games.length.toLocaleString() + ' games...', '', elapsed() + ' — assigning colors and screen positions');
+            await new Promise(r => setTimeout(r, 0));
+
+            ratingNames = allData.ratings;
+            genreNames = allData.genres || [];
+            tagNames = allData.tags || [];
+            allGames = allData.games;
+
+            allGames.forEach(g => {
+                g._sx = 0; g._sy = 0; g._r = 0;
+                g._color = getGameColor(g);
+                g._netNode = null;
+                g._neighbors = null;
+            });
+
+            // Pre-sort by review count for label rendering
+            gamesByReviews = [...allGames].sort((a, b) => b[3] - a[3]);
+
+            const nodeCount = netData.nodes.length.toLocaleString();
+            const linkCount = netData.links.length.toLocaleString();
+            setLoadProgress(78, 'Matching ' + nodeCount + ' network nodes to games...', '', elapsed() + ' — title lookup across ' + allGames.length.toLocaleString() + ' entries');
+            await new Promise(r => setTimeout(r, 0));
+
+            // Match network nodes to allGames by title
+            const titleToGame = new Map();
+            allGames.forEach(g => titleToGame.set(g[0], g));
+            function truncTitle(t) { return t.length > 60 ? t.substring(0, 57) + '...' : t; }
+
+            let matched = 0;
+            netData.nodes.forEach(n => {
+                const game = titleToGame.get(n.title) || titleToGame.get(truncTitle(n.title));
+                if (game) { n._game = game; game._netNode = n; matched++; }
+            });
+
+            setLoadProgress(82, 'Building adjacency from ' + linkCount + ' edges...', '', elapsed() + ' — matched ' + matched.toLocaleString() + '/' + nodeCount + ' nodes');
+            await new Promise(r => setTimeout(r, 0));
+
+            // Build adjacency
+            const adj = new Map();
+            netData.nodes.forEach((n, i) => adj.set(i, []));
+            netData.links.forEach(l => {
+                adj.get(l.source).push({ nodeIdx: l.target, weight: l.weight });
+                adj.get(l.target).push({ nodeIdx: l.source, weight: l.weight });
+            });
+
+            setLoadProgress(88, 'Sorting neighbor lists for ' + nodeCount + ' nodes...', '', elapsed() + ' — ranking by shared-reviewer weight');
+            await new Promise(r => setTimeout(r, 0));
+
+            netData.nodes.forEach((n, i) => {
+                if (n._game) {
+                    n._game._neighbors = adj.get(i)
+                        .sort((a, b) => b.weight - a.weight)
+                        .map(nb => ({
+                            game: netData.nodes[nb.nodeIdx]._game,
+                            title: netData.nodes[nb.nodeIdx].title,
+                            weight: nb.weight,
+                        }))
+                        .filter(nb => nb.game);
+                }
+            });
+
+            // Build edge objects — log scale so weak edges are visible
+            const minW = netData.meta.min_edge_weight || d3.min(netData.links, l => l.weight);
+            const maxW = d3.max(netData.links, l => l.weight);
+            const lwScale = d3.scaleLog().domain([minW, maxW]).range([0.3, 1.5]).clamp(true);
+            const loScale = d3.scaleLog().domain([minW, maxW]).range([0.05, 0.25]).clamp(true);
+
+            setLoadProgress(93, 'Preparing ' + linkCount + ' edges for rendering...', '', elapsed() + ' — computing line widths and opacity');
+            await new Promise(r => setTimeout(r, 0));
+
+            networkEdges = netData.links.map(l => {
+                const sGame = netData.nodes[l.source]._game;
+                const tGame = netData.nodes[l.target]._game;
+                if (!sGame || !tGame) return null;
+                const yearSpan = Math.abs(sGame[1] - tGame[1]);
+                return { source: sGame, target: tGame, weight: l.weight, _width: lwScale(l.weight), _opacity: loScale(l.weight), _yearSpan: yearSpan };
+            }).filter(Boolean);
+
+            // Build per-game edge index for O(degree) highlight lookups
+            gameEdgeIndex.clear();
+            for (const edge of networkEdges) {
+                if (!gameEdgeIndex.has(edge.source)) gameEdgeIndex.set(edge.source, []);
+                if (!gameEdgeIndex.has(edge.target)) gameEdgeIndex.set(edge.target, []);
+                gameEdgeIndex.get(edge.source).push(edge);
+                gameEdgeIndex.get(edge.target).push(edge);
+            }
+
+            // Build persistent title→game map for fast connection clicks
+            titleToGameMap.clear();
+            allGames.forEach(g => titleToGameMap.set(g[0], g));
+
+            setLoadProgress(98, 'Building quadtree and layout...', '', elapsed() + ' — ' + networkEdges.length.toLocaleString() + ' renderable edges');
+            await new Promise(r => setTimeout(r, 0));
+
+            buildScatter();
+            setupInteraction();
+            buildColorModeUI();
+            updateLegendItems();
+            updateLegendNote();
+            buildNetworkControlsUI();
+            updateNetworkNote();
+            window.updateNetworkNote = updateNetworkNote;
+            buildGenreFilters();
+            initFilterPanel();
+
+            // Expose shared data for other view modules
+            window._steamData = {
+                allGames, gamesByReviews, genreNames, tagNames, ratingNames,
+                networkEdges, netData,
+                RATING_COLORS, RATING_LABELS, PRICE_COLORS, PRICE_LABELS,
+                getGameColor, gamePassesFilter, filterActive: () => filterActive || activeGenre !== null,
+                yearColorScale, reviewColorScale,
+            };
+
+            // ── High-res export function for Playwright ──
+            window._steamExportScatter = function(w, h) {
+                const c = document.createElement('canvas');
+                c.width = w; c.height = h;
+                const cx = c.getContext('2d');
+
+                // Background
+                cx.fillStyle = '#0a0a0a';
+                cx.fillRect(0, 0, w, h);
+
+                // Scales for export dimensions
+                const pad = { top: Math.round(h * 0.05), right: Math.round(w * 0.02), bottom: Math.round(h * 0.04), left: Math.round(w * 0.035) };
+                const exs = d3.scaleLinear().domain([2005, 2025]).range([pad.left, w - pad.right]);
+                const eys = d3.scaleLinear().domain([0, 100]).range([h - pad.bottom, pad.top]);
+                const ess = d3.scaleSqrt().domain([1, 500000]).range([Math.max(1, w / 1920), Math.max(4, w / 1920 * 8)]);
+                const fontScale = w / 1920;
+
+                // Seeded jitter (same as buildScatter)
+                function mulberry32(a) { return function() { a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+                const jitterRng = mulberry32(42);
+
+                // Compute export positions with game→position map for O(1) edge lookup
+                const posMap = new Map();
+                const positions = allGames.map(g => {
+                    const reviews = g[3];
+                    const jitterAmount = reviews <= 5 ? 4 : reviews <= 20 ? 2.5 : reviews <= 100 ? 1 : 0;
+                    const jitter = jitterAmount > 0 ? (jitterRng() - 0.5) * 2 * jitterAmount : 0;
+                    const p = {
+                        x: exs(g[1]),
+                        y: eys(Math.max(0, Math.min(100, g[2] + jitter))),
+                        r: Math.max(w / 3840, ess(reviews)),
+                        color: g._color,
+                        game: g
+                    };
+                    posMap.set(g, p);
+                    return p;
+                });
+
+                // Grid lines
+                cx.strokeStyle = '#1a1a1a';
+                cx.lineWidth = Math.max(1, fontScale * 0.5);
+                for (let y = 0; y <= 100; y += 20) {
+                    const sy = eys(y);
+                    cx.beginPath(); cx.moveTo(pad.left, sy); cx.lineTo(w - pad.right, sy); cx.stroke();
+                }
+                for (let x = 2006; x <= 2024; x += 2) {
+                    const sx = exs(x);
+                    cx.beginPath(); cx.moveTo(sx, pad.top); cx.lineTo(sx, h - pad.bottom); cx.stroke();
+                }
+
+                // Network edges (all, year-column bundled)
+                const bundleStrength = 0.55;
+                const yearWpX = {};
+                for (let yr = 2005; yr <= 2025; yr++) yearWpX[yr] = exs(yr);
+
+                const spanBuckets = [
+                    { maxSpan: 1,  color: '#EE3377', alpha: 0.10, width: 0.4, lane: 0 },
+                    { maxSpan: 3,  color: '#EE7733', alpha: 0.20, width: 0.6, lane: -30 * (h / 1080) },
+                    { maxSpan: 6,  color: '#BBBB00', alpha: 0.35, width: 0.8, lane: 30 * (h / 1080) },
+                    { maxSpan: 10, color: '#009988', alpha: 0.50, width: 1.1, lane: -55 * (h / 1080) },
+                    { maxSpan: 99, color: '#0077BB', alpha: 0.70, width: 1.6, lane: 55 * (h / 1080) },
+                ];
+
+                // Sort edges into buckets
+                for (const edge of networkEdges) {
+                    for (const b of spanBuckets) {
+                        if (edge._yearSpan <= b.maxSpan) {
+                            if (!b.edges) b.edges = [];
+                            b.edges.push(edge);
+                            break;
+                        }
+                    }
+                }
+
+                // Draw edge buckets
+                for (const b of spanBuckets) {
+                    if (!b.edges || b.edges.length === 0) continue;
+                    cx.strokeStyle = b.color;
+                    cx.lineWidth = b.width * fontScale;
+                    cx.globalAlpha = b.alpha;
+                    cx.beginPath();
+                    for (const edge of b.edges) {
+                        const sp = posMap.get(edge.source);
+                        const tp = posMap.get(edge.target);
+                        if (!sp || !tp) continue;
+                        const sx = sp.x, sy = sp.y;
+                        const tx = tp.x, ty = tp.y;
+                        if (edge._yearSpan <= 1) {
+                            cx.moveTo(sx, sy);
+                            cx.lineTo(tx, ty);
+                        } else {
+                            const avgRating = (edge.source[2] + edge.target[2]) / 2;
+                            const wpY = eys(avgRating) + b.lane;
+                            const sWpX = yearWpX[edge.source[1]] || sx;
+                            const tWpX = yearWpX[edge.target[1]] || tx;
+                            cx.moveTo(sx, sy);
+                            cx.bezierCurveTo(sx + (sWpX - sx) * bundleStrength, sy + (wpY - sy) * bundleStrength,
+                                             tx + (tWpX - tx) * bundleStrength, ty + (wpY - ty) * bundleStrength, tx, ty);
+                        }
+                    }
+                    cx.stroke();
+                }
+                cx.globalAlpha = 1;
+
+                // Dots (all 83K, color-batched)
+                const byColor = new Map();
+                for (const p of positions) {
+                    if (!byColor.has(p.color)) byColor.set(p.color, []);
+                    byColor.get(p.color).push(p);
+                }
+                byColor.forEach((pts, color) => {
+                    cx.fillStyle = color;
+                    cx.globalAlpha = 0.85;
+                    cx.beginPath();
+                    for (const p of pts) {
+                        cx.moveTo(p.x + p.r, p.y);
+                        cx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                    }
+                    cx.fill();
+                });
+                cx.globalAlpha = 1;
+
+                // Labels for top games
+                const fontSize = Math.max(9, 9 * fontScale);
+                cx.font = `600 ${fontSize}px -apple-system, sans-serif`;
+                cx.textAlign = 'center';
+                cx.textBaseline = 'bottom';
+                const threshold = 400000 / Math.pow(3, 2.8); // k=3 equivalent
+                const labelPadX = 55 * fontScale;
+                const labelPadY = 16 * fontScale;
+                const placed = [];
+                for (const g of gamesByReviews) {
+                    if (g[3] < threshold) break;
+                    if (placed.length >= 60) break;
+                    const p = posMap.get(g);
+                    if (!p) continue;
+                    const lx = p.x, ly = p.y - p.r - 3 * fontScale;
+                    let overlaps = false;
+                    for (const pl of placed) {
+                        if (Math.abs(lx - pl[0]) < labelPadX && Math.abs(ly - pl[1]) < labelPadY) { overlaps = true; break; }
+                    }
+                    if (overlaps) continue;
+                    const label = g[0].length > 22 ? g[0].substring(0, 20) + '...' : g[0];
+                    // Label background
+                    const tw = cx.measureText(label).width;
+                    cx.fillStyle = 'rgba(10, 10, 10, 0.75)';
+                    cx.fillRect(lx - tw / 2 - 3, ly - fontSize - 1, tw + 6, fontSize + 3);
+                    cx.fillStyle = '#e0e0e0';
+                    cx.fillText(label, lx, ly);
+                    placed.push([lx, ly]);
+                }
+
+                // Axes
+                cx.fillStyle = '#888';
+                const axisFontSize = Math.max(10, 11 * fontScale);
+                cx.font = `${axisFontSize}px -apple-system, sans-serif`;
+                cx.textAlign = 'center';
+                for (let x = 2006; x <= 2024; x += 2) {
+                    cx.fillText(x, exs(x), h - pad.bottom + 18 * fontScale);
+                }
+                cx.textAlign = 'right';
+                for (let y = 0; y <= 100; y += 20) {
+                    cx.fillText(y + '%', pad.left - 8 * fontScale, eys(y) + 4 * fontScale);
+                }
+                cx.fillStyle = '#666';
+                cx.font = `${Math.max(9, 10 * fontScale)}px -apple-system, sans-serif`;
+                cx.textAlign = 'center';
+                cx.fillText('Release Year', w / 2, h - 8 * fontScale);
+                cx.save();
+                cx.translate(14 * fontScale, h / 2);
+                cx.rotate(-Math.PI / 2);
+                cx.fillText('Positive Review %', 0, 0);
+                cx.restore();
+
+                return c;
+            };
+
+            setLoadProgress(100, 'Ready — ' + allGames.length.toLocaleString() + ' games, ' + networkEdges.length.toLocaleString() + ' connections', '', elapsed() + ' total');
+            await new Promise(r => setTimeout(r, 600));
+            loadingEl.style.display = 'none';
+
+            // Auto-collapse legend on mobile
+            if (window.innerWidth <= 768) {
+                document.getElementById('controls-panel').classList.add('collapsed');
+            }
+        })();
+
+        // ═══════════════════════════════════
+        // SCATTER LAYOUT
+        // ═══════════════════════════════════
+        function buildScatter() {
+            const pad = { top: 90, right: 30, bottom: 50, left: 60 };
+            xScale = d3.scaleLinear().domain([2005, 2025]).range([pad.left, width - pad.right]);
+            yScale = d3.scaleLinear().domain([0, 100]).range([height - pad.bottom, pad.top]);
+            sizeScale = d3.scaleSqrt().domain([1, 500000]).range([1, 8]);
+
+            // Seeded pseudo-random for stable jitter
+            function mulberry32(a) { return function() { a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+            const jitterRng = mulberry32(42);
+
+            allGames.forEach(g => {
+                g._sx = xScale(g[1]);
+                // Add uncertainty jitter: low-review games spread vertically
+                const reviews = g[3];
+                const jitterAmount = reviews <= 5 ? 4 : reviews <= 20 ? 2.5 : reviews <= 100 ? 1 : 0;
+                const jitter = jitterAmount > 0 ? (jitterRng() - 0.5) * 2 * jitterAmount : 0;
+                g._sy = yScale(Math.max(0, Math.min(100, g[2] + jitter)));
+                g._r = Math.max(1, sizeScale(reviews));
+            });
+
+            quadtree = d3.quadtree().x(d => d._sx).y(d => d._sy).addAll(allGames);
+            render();
+        }
+
+        // ═══════════════════════════════════
+        // RENDERING
+        // ═══════════════════════════════════
+        function scheduleRender() {
+            if (renderRAF) return;
+            renderRAF = requestAnimationFrame(() => { renderRAF = null; render(); });
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, width, height);
+            ctx.save();
+            ctx.translate(transform.x, transform.y);
+            ctx.scale(transform.k, transform.k);
+
+            const pad = { top: 90, right: 30, bottom: 50, left: 60 };
+            const k = transform.k;
+
+            // Viewport bounds in world coords (for culling)
+            const [vx0, vy0] = screenToWorld(0, 0);
+            const [vx1, vy1] = screenToWorld(width, height);
+            const vMargin = 20 / k; // Small margin so dots at edge aren't clipped
+
+            // ── Compute active/connected state ──
+            const active = pinnedGame || hoveredItem;
+            const activeIsConnected = active && active._neighbors && active._neighbors.length > 0;
+            const connectedSet = new Set();
+
+            if (activeIsConnected) {
+                connectedSet.add(active);
+                active._neighbors.forEach(n => { if (n.game) connectedSet.add(n.game); });
+            }
+
+            // Grid lines (fade when connections highlighted)
+            ctx.strokeStyle = activeIsConnected ? '#0d0d0d' : '#1a1a1a';
+            ctx.lineWidth = 1;
+            for (let y = 0; y <= 100; y += 20) {
+                const sy = yScale(y);
+                ctx.beginPath(); ctx.moveTo(pad.left, sy); ctx.lineTo(width - pad.right, sy); ctx.stroke();
+            }
+            for (let x = 2006; x <= 2024; x += 2) {
+                const sx = xScale(x);
+                ctx.beginPath(); ctx.moveTo(sx, pad.top); ctx.lineTo(sx, height - pad.bottom); ctx.stroke();
+            }
+
+            // ── ALL DOTS first (viewport-culled) — edges draw ON TOP ──
+            // Split into passing/dimmed buckets for filter dimming
+            const byColor = new Map();
+            const dimByColor = new Map();
+            for (const g of allGames) {
+                // Viewport culling: skip dots outside visible area
+                if (g._sx < vx0 - vMargin || g._sx > vx1 + vMargin ||
+                    g._sy < vy0 - vMargin || g._sy > vy1 + vMargin) continue;
+                // Genre filtering: skip games that don't match active genre
+                if (activeGenre !== null && (!g[6] || !g[6].includes(activeGenre))) continue;
+                const c = g._color;
+                if (filterActive && !gamePassesFilter(g)) {
+                    if (!dimByColor.has(c)) dimByColor.set(c, []);
+                    dimByColor.get(c).push(g);
+                } else {
+                    if (!byColor.has(c)) byColor.set(c, []);
+                    byColor.get(c).push(g);
+                }
+            }
+
+            // Draw dimmed games first (filter non-matches)
+            if (filterActive) {
+                dimByColor.forEach((games, color) => {
+                    ctx.fillStyle = color;
+                    ctx.globalAlpha = activeIsConnected ? 0.04 : 0.15;
+                    ctx.beginPath();
+                    for (const g of games) {
+                        if (g === hoveredItem || g === pinnedGame) continue;
+                        ctx.moveTo(g._sx + g._r, g._sy);
+                        ctx.arc(g._sx, g._sy, g._r, 0, Math.PI * 2);
+                    }
+                    ctx.fill();
+                });
+            }
+
+            // Draw passing games — dim dramatically when a connected game is active
+            byColor.forEach((games, color) => {
+                ctx.fillStyle = color;
+                ctx.globalAlpha = activeIsConnected ? 0.12 : 0.85;
+                ctx.beginPath();
+                for (const g of games) {
+                    if (activeIsConnected && connectedSet.has(g)) continue;
+                    if (g === hoveredItem || g === pinnedGame) continue;
+                    ctx.moveTo(g._sx + g._r, g._sy);
+                    ctx.arc(g._sx, g._sy, g._r, 0, Math.PI * 2);
+                }
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1;
+
+            // ── NETWORK EDGES (drawn ON TOP of dots, using 'lighter' blend) ──
+            // During active pan/zoom, skip all edges for perf (highlighted edges still render)
+            const drawEdges = !isInteracting;
+
+            if (drawEdges) {
+                let edgeLimit = networkEdges.length;
+                if (!activeIsConnected) {
+                    if (k < 0.3) {
+                        edgeLimit = Math.floor(networkEdges.length * 0.06 * edgeDensity);
+                    } else if (k < 0.5) {
+                        edgeLimit = Math.floor(networkEdges.length * 0.12 * edgeDensity);
+                    } else if (k < 0.8) {
+                        edgeLimit = Math.floor(networkEdges.length * 0.30 * edgeDensity);
+                    } else if (k < 1.2) {
+                        edgeLimit = Math.floor(networkEdges.length * 0.60 * edgeDensity);
+                    } else {
+                        edgeLimit = Math.floor(networkEdges.length * edgeDensity);
+                    }
+                    edgeLimit = Math.max(edgeLimit, 100);
+                    edgeLimit = Math.min(edgeLimit, 300000); // Hard cap for performance
+                } else {
+                    // When node is selected, dim background edges are barely visible (alpha 0.02)
+                    // Cap them aggressively since they're just atmosphere
+                    edgeLimit = Math.min(edgeLimit, Math.floor(networkEdges.length * 0.15 * edgeDensity + 500));
+                }
+
+                if (activeIsConnected) {
+                    // Dim all non-active edges
+                    ctx.globalAlpha = 0.02;
+                    ctx.strokeStyle = '#444';
+                    ctx.lineWidth = 0.5;
+                    ctx.beginPath();
+                    for (let i = 0; i < edgeLimit; i++) {
+                        const edge = networkEdges[i];
+                        if (edge.source === active || edge.target === active) continue;
+                        ctx.moveTo(edge.source._sx, edge.source._sy);
+                        ctx.lineTo(edge.target._sx, edge.target._sy);
+                    }
+                    ctx.stroke();
+                } else {
+                    // Year-column bundling with rating-corridor separation
+                    // Waypoint Y = average rating of endpoints (spreads bundles vertically)
+                    const bundleStrength = 0.55;
+
+                    // Pre-compute year waypoint X positions
+                    const yearWpX = {};
+                    for (let yr = 2005; yr <= 2025; yr++) {
+                        yearWpX[yr] = xScale(yr);
+                    }
+
+                    // Multi-lane bundling: each year-span bucket routes through
+                    // a different Y offset so colors physically separate
+                    const HUB_DEG = 80;
+                    const spanBuckets = [
+                        { maxSpan: 1,  color: '#EE3377', alpha: 0.10, width: 0.4, lane: 0,   edges: [], hubEdges: [], hiEdges: [], hiHubEdges: [] },
+                        { maxSpan: 3,  color: '#EE7733', alpha: 0.20, width: 0.6, lane: -30,  edges: [], hubEdges: [], hiEdges: [], hiHubEdges: [] },
+                        { maxSpan: 6,  color: '#BBBB00', alpha: 0.35, width: 0.8, lane: 30,   edges: [], hubEdges: [], hiEdges: [], hiHubEdges: [] },
+                        { maxSpan: 10, color: '#009988', alpha: 0.50, width: 1.1, lane: -55,  edges: [], hubEdges: [], hiEdges: [], hiHubEdges: [] },
+                        { maxSpan: 99, color: '#0077BB', alpha: 0.70, width: 1.6, lane: 55,   edges: [], hubEdges: [], hiEdges: [], hiHubEdges: [] },
+                    ];
+                    // Bucket edges: split by hub degree AND weight tier
+                    const hiWeightThresh = 50000; // top ~10% by shared reviewers
+                    for (let i = 0; i < edgeLimit; i++) {
+                        const edge = networkEdges[i];
+                        // Genre filtering: skip edges where neither endpoint matches
+                        if (activeGenre !== null) {
+                            const sMatch = edge.source[6] && edge.source[6].includes(activeGenre);
+                            const tMatch = edge.target[6] && edge.target[6].includes(activeGenre);
+                            if (!sMatch && !tMatch) continue;
+                        }
+                        // Filter: skip edges where neither endpoint passes
+                        if (filterActive && !gamePassesFilter(edge.source) && !gamePassesFilter(edge.target)) continue;
+                        for (const b of spanBuckets) {
+                            if (edge._yearSpan <= b.maxSpan) {
+                                const maxDeg = Math.max(
+                                    edge.source._neighbors ? edge.source._neighbors.length : 0,
+                                    edge.target._neighbors ? edge.target._neighbors.length : 0
+                                );
+                                const isHub = maxDeg > HUB_DEG;
+                                const isHi = edge.weight > hiWeightThresh;
+                                if (isHub) (isHi ? b.hiHubEdges : b.hubEdges).push(edge);
+                                else (isHi ? b.hiEdges : b.edges).push(edge);
+                                break;
+                            }
+                        }
+                    }
+                    // Draw each bucket: 4 passes (hub-low, hub-hi, normal-low, normal-hi)
+                    for (const b of spanBuckets) {
+                        const passes = [
+                            { edges: b.hubEdges, aScale: 0.2, wScale: 1.0 },
+                            { edges: b.hiHubEdges, aScale: 0.5, wScale: 1.4 },
+                            { edges: b.edges, aScale: 1.0, wScale: 1.0 },
+                            { edges: b.hiEdges, aScale: 2.0, wScale: 1.6 },
+                        ];
+                        for (const pass of passes) {
+                            if (pass.edges.length === 0) continue;
+                            ctx.strokeStyle = b.color;
+                            ctx.lineWidth = b.width * pass.wScale;
+                            ctx.globalAlpha = Math.min(1, b.alpha * pass.aScale);
+                            ctx.beginPath();
+                            for (const edge of pass.edges) {
+                                const sx = edge.source._sx, sy = edge.source._sy;
+                                const tx = edge.target._sx, ty = edge.target._sy;
+                                if (edge._yearSpan <= 1) {
+                                    ctx.moveTo(sx, sy);
+                                    ctx.lineTo(tx, ty);
+                                } else {
+                                    const avgRating = (edge.source[2] + edge.target[2]) / 2;
+                                    const wpY = yScale(avgRating) + b.lane;
+                                    const sYear = edge.source[1], tYear = edge.target[1];
+                                    const sWpX = yearWpX[sYear] || sx;
+                                    const tWpX = yearWpX[tYear] || tx;
+                                    const cp1x = sx + (sWpX - sx) * bundleStrength;
+                                    const cp1y = sy + (wpY - sy) * bundleStrength;
+                                    const cp2x = tx + (tWpX - tx) * bundleStrength;
+                                    const cp2y = ty + (wpY - ty) * bundleStrength;
+                                    ctx.moveTo(sx, sy);
+                                    ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, tx, ty);
+                                }
+                            }
+                            ctx.stroke();
+                        }
+                    }
+                }
+            }
+            ctx.globalAlpha = 1;
+
+            // ── HIGHLIGHTED EDGES (rating-corridor bundled, matching background) ──
+            if (activeIsConnected) {
+                const spanColors = ['#EE3377','#EE7733','#BBBB00','#009988','#0077BB'];
+                const spanThresh = [1, 3, 6, 10, 99];
+                const hLaneOff = [0, -30, 30, -55, 55]; // Match background lane offsets
+                const hBundle = 0.55;
+                // O(degree) lookup via pre-built index instead of scanning all 144K edges
+                const activeEdges = gameEdgeIndex.get(active) || [];
+                for (const edge of activeEdges) {
+                    let ci = 4;
+                    for (let i = 0; i < spanThresh.length; i++) {
+                        if (edge._yearSpan <= spanThresh[i]) { ci = i; break; }
+                    }
+                    ctx.globalAlpha = 0.5;
+                    ctx.strokeStyle = spanColors[ci];
+                    ctx.lineWidth = edge._width * 1.2;
+                    ctx.beginPath();
+                    const sx = edge.source._sx, sy = edge.source._sy;
+                    const tx = edge.target._sx, ty = edge.target._sy;
+                    ctx.moveTo(sx, sy);
+                    if (edge._yearSpan <= 1) {
+                        ctx.lineTo(tx, ty);
+                    } else {
+                        const avgRating = (edge.source[2] + edge.target[2]) / 2;
+                        const wpY = yScale(avgRating) + hLaneOff[ci];
+                        const sWpX = xScale(edge.source[1]) || sx;
+                        const tWpX = xScale(edge.target[1]) || tx;
+                        const cp1x = sx + (sWpX - sx) * hBundle;
+                        const cp1y = sy + (wpY - sy) * hBundle;
+                        const cp2x = tx + (tWpX - tx) * hBundle;
+                        const cp2y = ty + (wpY - ty) * hBundle;
+                        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, tx, ty);
+                    }
+                    ctx.stroke();
+                }
+                ctx.globalAlpha = 1;
+
+                for (const g of connectedSet) {
+                    if (!g || g === active) continue;
+                    ctx.fillStyle = g._color;
+                    ctx.globalAlpha = 0.4;
+                    ctx.beginPath();
+                    ctx.arc(g._sx, g._sy, g._r, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.globalAlpha = 1;
+
+                // Labels for connected neighbors (screen-space sizing)
+                if (k >= 1.2) {
+                    const fontSize = 10 / k; // Constant ~10px on screen
+                    ctx.font = `bold ${fontSize}px -apple-system, sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'bottom';
+                    const gap = 4 / k;
+                    // Only label the top neighbors to avoid clutter
+                    let labeled = 0;
+                    for (const g of connectedSet) {
+                        if (!g || g === active) continue;
+                        if (++labeled > 20) break;
+                        const label = g[0].length > 20 ? g[0].substring(0, 18) + '...' : g[0];
+                        drawLabel(label, g._sx, g._sy - g._r - gap, fontSize);
+                    }
+                }
+            }
+
+            // ── ACTIVE NODE (hovered or pinned) ──
+            const highlight = hoveredItem || pinnedGame;
+            if (highlight) {
+                ctx.shadowColor = highlight._color;
+                ctx.shadowBlur = 8;
+                ctx.fillStyle = highlight._color;
+                ctx.globalAlpha = 0.95;
+                ctx.beginPath();
+                ctx.arc(highlight._sx, highlight._sy, highlight._r + 1.5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+                ctx.globalAlpha = 1;
+            }
+
+            // ── ZOOM-DEPENDENT LABELS (screen-space) ──
+            if (k >= 1.5 && !activeIsConnected) {
+                // Show more labels as you zoom in, but cap total to prevent wall-of-text
+                const threshold = 400000 / Math.pow(k, 2.8);
+                // vx0/vy0/vx1/vy1 already computed at top of render()
+                const fontSize = 9 / k; // Constant ~9px on screen
+                ctx.font = `600 ${fontSize}px -apple-system, sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+
+                // Collision padding in world coords — ensures ~50px screen gap
+                const labelPadX = 55 / k;
+                const labelPadY = 16 / k;
+                const gap = 3 / k;
+                const placed = [];
+                const maxLabels = 40; // Hard cap to prevent clutter
+
+                for (const g of gamesByReviews) {
+                    if (g[3] < threshold) break;
+                    if (placed.length >= maxLabels) break;
+                    if (g._sx < vx0 || g._sx > vx1 || g._sy < vy0 || g._sy > vy1) continue;
+                    if (g === highlight) continue;
+                    if (filterActive && !gamePassesFilter(g)) continue;
+
+                    const lx = g._sx, ly = g._sy - g._r - gap;
+                    let overlaps = false;
+                    for (const p of placed) {
+                        if (Math.abs(lx - p[0]) < labelPadX && Math.abs(ly - p[1]) < labelPadY) {
+                            overlaps = true; break;
+                        }
+                    }
+                    if (overlaps) continue;
+
+                    const label = g[0].length > 22 ? g[0].substring(0, 20) + '...' : g[0];
+                    drawLabel(label, lx, ly, fontSize);
+                    placed.push([lx, ly]);
+                }
+            }
+
+            // Label for active node (screen-space, slightly larger)
+            if (highlight) {
+                const fontSize = 12 / k; // Constant ~12px on screen
+                const gap = 5 / k;
+                ctx.font = `bold ${fontSize}px -apple-system, sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                drawLabel(highlight[0], highlight._sx, highlight._sy - highlight._r - gap, fontSize, highlight._color);
+            }
+
+            // ── AXES ──
+            ctx.fillStyle = '#888';
+            ctx.font = '11px -apple-system, sans-serif';
+            ctx.textAlign = 'center';
+            for (let x = 2006; x <= 2024; x += 2) {
+                ctx.fillText(x, xScale(x), height - pad.bottom + 18);
+            }
+            ctx.textAlign = 'right';
+            for (let y = 0; y <= 100; y += 20) {
+                ctx.fillText(y + '%', pad.left - 8, yScale(y) + 4);
+            }
+            ctx.fillStyle = '#666';
+            ctx.font = '10px -apple-system, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('Release Year', width / 2, height - 8);
+            ctx.save();
+            ctx.translate(14, height / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText('Positive Review %', 0, 0);
+            ctx.restore();
+
+            ctx.restore();
+        }
+
+        function drawLabel(text, x, y, fontSize, accentColor) {
+            const metrics = ctx.measureText(text);
+            const tw = metrics.width;
+            const pad = 3;
+            ctx.fillStyle = 'rgba(10, 10, 10, 0.75)';
+            ctx.fillRect(x - tw / 2 - pad, y - fontSize - 1, tw + pad * 2, fontSize + 3);
+            ctx.fillStyle = accentColor || '#e0e0e0';
+            ctx.fillText(text, x, y);
+        }
+
+        // ═══════════════════════════════════
+        // INTERACTION
+        // ═══════════════════════════════════
+        function screenToWorld(sx, sy) {
+            return [(sx - transform.x) / transform.k, (sy - transform.y) / transform.k];
+        }
+
+        // Radius-aware hit detection: finds games whose rendered circle
+        // contains the point, preferring the smallest (most precise) match.
+        // Large bubbles are clickable anywhere on their surface, not just center.
+        function findGameAtPoint(wx, wy, isTouch) {
+            // Touch needs much more slop — fingers cover ~25px on screen
+            const tolerance = (isTouch ? 18 : 4) / transform.k;
+            const maxR = (isTouch ? 25 : 12) / transform.k;
+            let best = null;
+            let bestDist = Infinity;
+
+            quadtree.visit((node, x0, y0, x1, y1) => {
+                const searchR = maxR + 10;
+                if (x0 > wx + searchR || x1 < wx - searchR ||
+                    y0 > wy + searchR || y1 < wy - searchR) return true;
+                if (!node.length) {
+                    let d = node;
+                    do {
+                        const g = d.data;
+                        const dx = g._sx - wx;
+                        const dy = g._sy - wy;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        const hitR = g._r + tolerance;
+                        if (dist <= hitR && dist < bestDist) {
+                            best = g;
+                            bestDist = dist;
+                        }
+                    } while (d = d.next);
+                }
+            });
+            return best;
+        }
+
+        function setupInteraction() {
+            zoomBehavior = d3.zoom()
+                .scaleExtent([0.8, 15])
+                .translateExtent([[-width * 0.1, -height * 0.1], [width * 1.1, height * 1.1]])
+                .on('zoom', e => {
+                    transform = e.transform;
+                    isInteracting = true;
+                    clearTimeout(interactionTimer);
+                    interactionTimer = setTimeout(() => {
+                        isInteracting = false;
+                        render(); // Full render with edges when interaction settles
+                    }, 120);
+                    scheduleRender(); // Fast render (no edges) during interaction
+                });
+            d3.select(canvas).call(zoomBehavior)
+                .on('dblclick.zoom', null); // Disable double-click zoom (conflicts with game selection)
+
+            canvas.addEventListener('mousemove', onMouseMove);
+            canvas.addEventListener('mouseleave', () => {
+                hoveredItem = null;
+                if (!pinnedGame) infoPanel.classList.remove('visible');
+                canvas.style.cursor = 'default';
+                scheduleRender();
+            });
+
+            // Click to pin/unpin
+            canvas.addEventListener('click', onCanvasClick);
+
+            // Touch support — use touch coordinates for radius-aware hit detection
+            let lastTap = 0;
+            let touchHoldTimer = null;
+            let touchStartX = 0, touchStartY = 0;
+            let touchMoved = false;
+
+            // Touch-move shows hover tooltip
+            canvas.addEventListener('touchmove', (e) => {
+                const touch = e.touches[0];
+                if (touch && quadtree) {
+                    const rect = canvas.getBoundingClientRect();
+                    const mx = touch.clientX - rect.left;
+                    const my = touch.clientY - rect.top;
+
+                    // Track if touch moved significantly (for hold-to-pin)
+                    const dx = mx - touchStartX;
+                    const dy = my - touchStartY;
+                    if (Math.sqrt(dx * dx + dy * dy) > 15) {
+                        touchMoved = true;
+                        if (touchHoldTimer) {
+                            clearTimeout(touchHoldTimer);
+                            touchHoldTimer = null;
+                        }
+                    }
+
+                    const [wx, wy] = screenToWorld(mx, my);
+                    const found = findGameAtPoint(wx, wy, true);
+
+                    if (found !== hoveredItem) {
+                        hoveredItem = found;
+                        if (found && !pinnedGame) {
+                            showInfo(found);
+                        }
+                        scheduleRender();
+                    }
+                }
+            }, { passive: true });
+
+            // Touch-start begins hold timer
+            canvas.addEventListener('touchstart', (e) => {
+                const touch = e.touches[0];
+                if (touch) {
+                    const rect = canvas.getBoundingClientRect();
+                    touchStartX = touch.clientX - rect.left;
+                    touchStartY = touch.clientY - rect.top;
+                    touchMoved = false;
+
+                    // Start 400ms timer for hold-to-pin
+                    touchHoldTimer = setTimeout(() => {
+                        if (!touchMoved && quadtree) {
+                            const [wx, wy] = screenToWorld(touchStartX, touchStartY);
+                            const found = findGameAtPoint(wx, wy, true);
+                            if (found) {
+                                pinGame(found);
+                                // Haptic feedback if available
+                                if (navigator.vibrate) navigator.vibrate(50);
+                            }
+                        }
+                        touchHoldTimer = null;
+                    }, 400);
+                }
+            }, { passive: true });
+
+            canvas.addEventListener('touchend', (e) => {
+                // Clear hold timer if touch ends early
+                if (touchHoldTimer) {
+                    clearTimeout(touchHoldTimer);
+                    touchHoldTimer = null;
+                }
+
+                const now = Date.now();
+                if (now - lastTap < 300) return; // Ignore double-tap (zoom)
+                lastTap = now;
+
+                const touch = e.changedTouches[0];
+                if (touch && quadtree && !touchMoved) {
+                    // Only pin on tap if touch didn't move (not a pan)
+                    const rect = canvas.getBoundingClientRect();
+                    const mx = touch.clientX - rect.left;
+                    const my = touch.clientY - rect.top;
+                    const [wx, wy] = screenToWorld(mx, my);
+                    const found = findGameAtPoint(wx, wy, true);
+                    if (found) pinGame(found);
+                }
+
+                // Clear hover after 500ms if nothing pinned
+                setTimeout(() => {
+                    if (!pinnedGame) {
+                        hoveredItem = null;
+                        infoPanel.classList.remove('visible');
+                        scheduleRender();
+                    }
+                }, 500);
+            });
+
+            // Swipe-down on info panel to close
+            let infoPanelTouchStartY = 0;
+            infoPanel.addEventListener('touchstart', (e) => {
+                infoPanelTouchStartY = e.touches[0].clientY;
+            }, { passive: true });
+
+            infoPanel.addEventListener('touchmove', (e) => {
+                const deltaY = e.touches[0].clientY - infoPanelTouchStartY;
+                // Swipe down > 50px closes panel
+                if (deltaY > 50) {
+                    closeInfo();
+                }
+            }, { passive: true });
+
+            // Info panel controls
+            document.getElementById('info-pin').addEventListener('click', () => {
+                const active = pinnedGame || hoveredItem;
+                if (active) pinGame(active);
+            });
+            document.getElementById('info-close').addEventListener('click', closeInfo);
+
+            // Close help on outside click
+            document.addEventListener('click', (e) => {
+                const menu = document.getElementById('helpMenu');
+                const icon = document.getElementById('helpIcon');
+                if (menu.classList.contains('active') && !menu.contains(e.target) && !icon.contains(e.target)) {
+                    menu.classList.remove('active');
+                }
+            });
+        }
+
+        function onCanvasClick(e) {
+            // Don't fire on drag (zoom pan)
+            if (e.detail === 0) return;
+            const mx = e.offsetX, my = e.offsetY;
+            if (quadtree) {
+                const [wx, wy] = screenToWorld(mx, my);
+                const found = findGameAtPoint(wx, wy);
+                if (found) {
+                    pinGame(found);
+                    e.stopPropagation();
+                    return;
+                }
+            }
+            // Click on empty space unpins
+            if (pinnedGame) {
+                pinnedGame = null;
+                infoPanel.classList.remove('pinned');
+                if (!hoveredItem) infoPanel.classList.remove('visible');
+                render();
+            }
+        }
+
+        function pinGame(game) {
+            if (pinnedGame === game) {
+                // Unpin
+                pinnedGame = null;
+                infoPanel.classList.remove('pinned');
+                document.getElementById('info-pin').classList.remove('active');
+                if (!hoveredItem) infoPanel.classList.remove('visible');
+            } else {
+                pinnedGame = game;
+                infoPanel.classList.add('pinned');
+                document.getElementById('info-pin').classList.add('active');
+                showInfo(game);
+            }
+            render();
+        }
+
+        function closeInfo() {
+            pinnedGame = null;
+            hoveredItem = null;
+            infoPanel.classList.remove('visible', 'pinned');
+            document.getElementById('info-pin').classList.remove('active');
+            document.getElementById('controls-panel').classList.remove('mobile-hidden');
+            render();
+        }
+
+        function onMouseMove(e) {
+            const mx = e.offsetX, my = e.offsetY;
+            let found = null;
+
+            if (quadtree) {
+                const [wx, wy] = screenToWorld(mx, my);
+                found = findGameAtPoint(wx, wy);
+            }
+
+            if (found !== hoveredItem) {
+                hoveredItem = found;
+                if (found) {
+                    canvas.style.cursor = 'pointer';
+                    if (!pinnedGame) showInfo(found);
+                } else {
+                    canvas.style.cursor = 'default';
+                    if (!pinnedGame) infoPanel.classList.remove('visible');
+                }
+                scheduleRender();
+            }
+        }
+
+        // ═══════════════════════════════════
+        // INFO PANEL (full dataview)
+        // ═══════════════════════════════════
+        function showInfo(item) {
+            const titleEl = document.getElementById('info-title');
+            const bodyEl = document.getElementById('info-body');
+
+            titleEl.textContent = item[0];
+
+            const ratingColor = RATING_COLORS[item[5]];
+            const genres = item[6] ? item[6].map(i => genreNames[i]).filter(Boolean) : [];
+            const tags = item[7] ? item[7].slice(0, 5).map(i => tagNames[i]).filter(Boolean) : [];
+            const developer = item[8] || '';
+
+            let html = '<div class="info-tray-content">';
+            html += '<div class="info-tray-stats">';
+            html += `<div class="info-stat"><span class="info-stat-label">Year</span><span class="info-stat-value">${item[1]}</span></div>`;
+            html += `<div class="info-stat"><span class="info-stat-label">Rating</span><span class="info-stat-value" style="color:${ratingColor}">${ratingNames[item[5]]} ${item[2]}%<div class="info-rating-bar"><div class="info-rating-fill" style="width:${item[2]}%;background:${ratingColor}"></div></div></span></div>`;
+            html += `<div class="info-stat"><span class="info-stat-label">Reviews</span><span class="info-stat-value">${item[3].toLocaleString()}</span></div>`;
+            html += `<div class="info-stat"><span class="info-stat-label">Price</span><span class="info-stat-value">${item[4] > 0 ? '$' + item[4].toFixed(2) : 'Free'}</span></div>`;
+            if (developer) {
+                html += `<div class="info-stat"><span class="info-stat-label">Developer</span><span class="info-stat-value">${developer}</span></div>`;
+            }
+            html += '</div>'; // close stats
+
+            if (genres.length || tags.length) {
+                html += '<div class="info-tags-section">';
+                genres.forEach(g => { html += `<span class="info-tag genre">${g}</span>`; });
+                tags.forEach(t => { html += `<span class="info-tag">${t}</span>`; });
+                html += '</div>';
+            }
+            html += '</div>'; // close tray-content
+
+            if (item._neighbors && item._neighbors.length > 0) {
+                html += `<div class="info-connections">`;
+                html += `<div class="info-connections-title">Connections (${item._neighbors.length}):</div>`;
+                html += item._neighbors.slice(0, 10).map(c =>
+                    `<div class="connection-item" data-title="${c.title.replace(/"/g, '&quot;')}">${c.title} <span style="color:#666">(${c.weight.toLocaleString()})</span></div>`
+                ).join('');
+                html += `</div>`;
+            }
+
+            bodyEl.innerHTML = html;
+            infoPanel.classList.add('visible');
+            if (window.innerWidth <= 768) {
+                document.getElementById('controls-panel').classList.add('mobile-hidden');
+            }
+
+            // Clickable connections
+            bodyEl.querySelectorAll('.connection-item').forEach(el => {
+                el.addEventListener('click', () => {
+                    const title = el.getAttribute('data-title');
+                    const g = titleToGameMap.get(title);
+                    if (g) selectGame(g);
+                });
+            });
+        }
+
+        // ═══════════════════════════════════
+        // LEGEND
+        // ═══════════════════════════════════
+        function buildColorModeUI() {
+            const modes = [
+                { id: 'rating', label: 'Rating' },
+                { id: 'price', label: 'Price' },
+                { id: 'year', label: 'Year' },
+                { id: 'reviews', label: 'Reviews' },
+            ];
+            const container = document.getElementById('color-mode');
+            container.innerHTML = modes.map(m =>
+                `<button class="color-pill${m.id === colorMode ? ' active' : ''}" data-mode="${m.id}">${m.label}</button>`
+            ).join('');
+
+            container.querySelectorAll('.color-pill').forEach(pill => {
+                pill.addEventListener('click', () => setColorMode(pill.dataset.mode));
+            });
+        }
+
+        function buildNetworkControlsUI() {
+            // Group mode pills
+            document.getElementById('net-group-mode').querySelectorAll('.pill').forEach(pill => {
+                pill.addEventListener('click', () => {
+                    const mode = pill.dataset.mode;
+                    // Check if community data is available
+                    if (mode === 'community' && window._steamViews?.force?.hasCommunitiesData && !window._steamViews.force.hasCommunitiesData()) {
+                        // Show warning tooltip
+                        const legend = document.getElementById('net-group-legend');
+                        legend.innerHTML = '⚠️ Community data not available. Run compute_layout.py to generate.';
+                        legend.style.color = '#FF8800';
+                        setTimeout(() => {
+                            legend.innerHTML = '';
+                        }, 3000);
+                        return;
+                    }
+                    document.getElementById('net-group-mode').querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+                    pill.classList.add('active');
+                    if (window._steamViews && window._steamViews.force && window._steamViews.force.setGroupMode) {
+                        window._steamViews.force.setGroupMode(mode);
+                    }
+                    updateNetworkLegend();
+                });
+            });
+            // Size mode pills
+            document.getElementById('net-size-mode').querySelectorAll('.pill').forEach(pill => {
+                pill.addEventListener('click', () => {
+                    document.getElementById('net-size-mode').querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+                    pill.classList.add('active');
+                    if (window._steamViews && window._steamViews.force && window._steamViews.force.setSizeMode) {
+                        window._steamViews.force.setSizeMode(pill.dataset.mode);
+                    }
+                });
+            });
+            // Color mode pills (shared with scatter)
+            document.getElementById('net-color-mode').querySelectorAll('.pill').forEach(pill => {
+                pill.addEventListener('click', () => setColorMode(pill.dataset.mode));
+            });
+            // Layout mode pills
+            document.getElementById('net-layout-mode').querySelectorAll('.pill').forEach(pill => {
+                pill.addEventListener('click', () => {
+                    document.getElementById('net-layout-mode').querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+                    pill.classList.add('active');
+                    if (window._steamViews && window._steamViews.force && window._steamViews.force.setLayoutMode) {
+                        window._steamViews.force.setLayoutMode(pill.dataset.mode);
+                    }
+                });
+            });
+            // Initialize legend
+            updateNetworkLegend();
+        }
+
+        function updateNetworkNote() {
+            const el = document.getElementById('net-legend-note');
+            if (!el) return;
+            const sizeMode = document.querySelector('#net-size-mode .pill.active');
+            const sizeLabel = sizeMode ? sizeMode.textContent : 'Reviews';
+            el.innerHTML = `Size = ${sizeLabel.toLowerCase()}<br>Drag nodes to rearrange<br>R = reheat · F = fit`;
+        }
+
+        function updateNetworkLegend() {
+            const legend = document.getElementById('net-group-legend');
+            if (!legend) return;
+
+            const groupMode = window._steamViews?.force?.getGroupMode ? window._steamViews.force.getGroupMode() : 'genre';
+
+            if (groupMode === 'genre') {
+                // Show top genres with color dots
+                if (genreNames && genreNames.length > 0) {
+                    const topGenres = genreNames.slice(0, 6);
+                    legend.innerHTML = topGenres.map((name, i) => {
+                        const color = RATING_COLORS[i % RATING_COLORS.length];
+                        return `<span style="color:${color}">●</span> ${name}`;
+                    }).join(' · ');
+                    legend.style.color = '#888';
+                } else {
+                    legend.innerHTML = 'Nodes colored by Steam genre';
+                    legend.style.color = '#666';
+                }
+            } else if (groupMode === 'community') {
+                // Show community count
+                const numComm = window._steamViews?.force?.getNumCommunities ? window._steamViews.force.getNumCommunities() : 0;
+                if (numComm > 0) {
+                    legend.innerHTML = `${numComm} communities detected by co-review patterns`;
+                    legend.style.color = '#888';
+                } else {
+                    legend.innerHTML = 'Community data loading...';
+                    legend.style.color = '#666';
+                }
+            }
+        }
+
+        // Make updateNetworkLegend globally accessible
+        window.updateNetworkLegend = updateNetworkLegend;
+
+        function updateLegendItems() {
+            const el = document.getElementById('legend-items');
+
+            switch (colorMode) {
+                case 'rating':
+                    el.innerHTML = RATING_LABELS.slice(0, 7).map((r, i) =>
+                        `<div class="legend-item"><span class="legend-dot" style="background:${RATING_COLORS[i]}"></span>${r}</div>`
+                    ).join('');
+                    break;
+                case 'price':
+                    el.innerHTML = PRICE_LABELS.map((r, i) =>
+                        `<div class="legend-item"><span class="legend-dot" style="background:${PRICE_COLORS[i]}"></span>${r}</div>`
+                    ).join('');
+                    break;
+                case 'year':
+                    const yearGrad = 'linear-gradient(to right, ' +
+                        d3.range(2005, 2024).map(y => yearColorScale(y)).join(', ') + ')';
+                    el.innerHTML = `
+                        <div class="legend-gradient" style="background:${yearGrad}"></div>
+                        <div class="legend-gradient-labels"><span>2005</span><span>2015</span><span>2025</span></div>
+                    `;
+                    break;
+                case 'reviews':
+                    const revGrad = 'linear-gradient(to right, ' +
+                        d3.range(0, 6.6, 0.5).map(v => reviewColorScale(v)).join(', ') + ')';
+                    el.innerHTML = `
+                        <div class="legend-gradient" style="background:${revGrad}"></div>
+                        <div class="legend-gradient-labels"><span>1</span><span>1K</span><span>100K</span><span>1M+</span></div>
+                    `;
+                    break;
+            }
+        }
+
+        function updateLegendNote() {
+            const count = allGames ? allGames.length.toLocaleString() : '...';
+            document.getElementById('legend-note').innerHTML = `
+                Size = review count<br>
+                ${count} games, 2005&ndash;2025<br>
+                Lines = shared players (${networkEdges.length} connections)
+            `;
+        }
+
+        function buildGenreFilters() {
+            const container = document.getElementById('genre-filters');
+            if (!container || genreNames.length === 0) return;
+
+            // Show top 10 genres as filter pills
+            const topGenres = genreNames.slice(0, 10);
+            container.innerHTML = topGenres.map((name, i) =>
+                `<button class="genre-pill" data-idx="${i}">${name}</button>`
+            ).join('');
+
+            container.querySelectorAll('.genre-pill').forEach(pill => {
+                pill.addEventListener('click', () => {
+                    const idx = parseInt(pill.dataset.idx);
+                    if (activeGenre === idx) {
+                        activeGenre = null;
+                        pill.classList.remove('active');
+                    } else {
+                        activeGenre = idx;
+                        container.querySelectorAll('.genre-pill').forEach(p => p.classList.remove('active'));
+                        pill.classList.add('active');
+                    }
+                    updateGenreCount();
+                    render();
+                    // Notify active view module of genre filter change
+                    const activeTab = window._steamActiveTab ? window._steamActiveTab() : 'scatter';
+                    if (activeTab !== 'scatter' && window._steamViews && window._steamViews[activeTab] && window._steamViews[activeTab].onFilterChange) {
+                        window._steamViews[activeTab].onFilterChange();
+                    }
+                });
+            });
+        }
+
+        function updateGenreCount() {
+            const label = document.getElementById('genre-count');
+            if (!label) return;
+            if (activeGenre === null) {
+                label.textContent = 'All';
+            } else {
+                const count = allGames.filter(g => g[6] && g[6].includes(activeGenre)).length;
+                label.textContent = `${count.toLocaleString()} games`;
+            }
+        }
+
+        // ═══════════════════════════════════
+        // SIDEBAR TOGGLE
+        // ═══════════════════════════════════
+        window.toggleLegend = function() {
+            document.getElementById('controls-panel').classList.toggle('collapsed');
+        };
+
+        // Density slider
+        document.getElementById('density-slider').addEventListener('input', (e) => {
+            edgeDensity = parseInt(e.target.value) / 100;
+            document.getElementById('density-label').textContent = e.target.value + '%';
+            const fill = document.getElementById('density-fill');
+            if (fill) fill.style.width = e.target.value + '%';
+            render();
+        });
+
+        // ═══════════════════════════════════
+        // SEARCH
+        // ═══════════════════════════════════
+        const searchInput = document.getElementById('search');
+        const searchResults = document.getElementById('search-results');
+        let searchDebounce = null;
+
+        searchInput.addEventListener('input', () => {
+            clearTimeout(searchDebounce);
+            searchDebounce = setTimeout(doSearch, 150);
+        });
+
+        searchInput.addEventListener('focus', () => {
+            if (searchInput.value.length >= 2) doSearch();
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.search-wrap')) searchResults.classList.remove('visible');
+        });
+
+        searchInput.addEventListener('keydown', e => e.stopPropagation());
+
+        function doSearch() {
+            const q = searchInput.value.trim().toLowerCase();
+            if (q.length < 2 || !allGames) {
+                searchResults.classList.remove('visible');
+                return;
+            }
+
+            const starts = [];
+            const contains = [];
+            for (const g of allGames) {
+                const title = g[0].toLowerCase();
+                if (title.startsWith(q)) starts.push(g);
+                else if (title.includes(q)) contains.push(g);
+                if (starts.length + contains.length >= 15) break;
+            }
+            const matches = [...starts, ...contains].slice(0, 10);
+
+            if (matches.length === 0) {
+                searchResults.innerHTML = '<div class="search-result"><span class="search-result-title" style="color:#888">No matches</span></div>';
+                searchResults.classList.add('visible');
+                return;
+            }
+
+            searchResults.innerHTML = matches.map((g, i) =>
+                `<div class="search-result" data-idx="${i}">
+                    <div class="search-result-title">${g[0]}${g._netNode ? ' \u{1F517}' : ''}</div>
+                    <div class="search-result-meta">${g[1]} &middot; ${ratingNames[g[5]]} &middot; ${g[3].toLocaleString()} reviews</div>
+                </div>`
+            ).join('');
+
+            searchResults.querySelectorAll('.search-result').forEach((el, i) => {
+                el.addEventListener('click', () => {
+                    selectGame(matches[i]);
+                    searchResults.classList.remove('visible');
+                    searchInput.value = matches[i][0];
+                    searchInput.blur();
+                });
+            });
+            searchResults.classList.add('visible');
+        }
+
+        function selectGame(game) {
+            // Check if we're on a non-scatter tab and delegate to that view
+            const activeTab = window._steamActiveTab ? window._steamActiveTab() : 'scatter';
+            if (activeTab !== 'scatter') {
+                const view = window._steamViews && window._steamViews[activeTab];
+                if (view && view.selectGame) {
+                    view.selectGame(game);
+                    return;
+                }
+            }
+
+            // Scatter view: zoom to game's scatter coordinates
+            if (game._sx === undefined) return;
+
+            // Pin immediately so info panel shows while zooming
+            pinnedGame = game;
+            infoPanel.classList.add('pinned');
+            document.getElementById('info-pin').classList.add('active');
+            showInfo(game);
+
+            const targetK = 4;
+            const tx = width / 2 - game._sx * targetK;
+            const ty = height / 2 - game._sy * targetK;
+            const targetTransform = d3.zoomIdentity.translate(tx, ty).scale(targetK);
+
+            if (zoomBehavior) {
+                // Smooth animated zoom — suppresses edges during transition for perf
+                d3.select(canvas).transition().duration(600).ease(d3.easeCubicOut)
+                    .call(zoomBehavior.transform, targetTransform);
+            } else {
+                transform = targetTransform;
+                render();
+            }
+        }
+
+        // ═══════════════════════════════════
+        // FILTER PANEL (dual-range sliders + zoom-to-region)
+        // ═══════════════════════════════════
+        const FILTER_DEFAULTS = { year: [2005, 2025], rating: [0, 100], price: [0, 70], reviews: [0, 70] };
+        let filters = { year: [2005, 2025], rating: [0, 100], price: [0, 70], reviews: [0, 70] };
+        let filterActive = false;
+        let zoomDebounce = null;
+
+        function reviewSliderToCount(v) { return Math.pow(10, v / 10); }
+
+        function formatReviewCount(v) {
+            const n = reviewSliderToCount(v);
+            if (n >= 1000000) return Math.round(n / 1000000) + 'M';
+            if (n >= 100000) return Math.round(n / 1000) + 'K';
+            if (n >= 10000) return Math.round(n / 1000) + 'K';
+            if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+            if (n >= 100) return Math.round(n).toString();
+            if (n >= 10) return Math.round(n).toString();
+            return Math.round(n).toString();
+        }
+
+        function gamePassesFilter(g) {
+            // Genre filter (independent of slider filterActive)
+            if (activeGenre !== null && (!g[6] || !g[6].includes(activeGenre))) return false;
+            if (!filterActive) return true;
+            if (g[1] < filters.year[0] || g[1] > filters.year[1]) return false;
+            if (g[2] < filters.rating[0] || g[2] > filters.rating[1]) return false;
+            if (g[4] < filters.price[0] || (filters.price[1] < 70 && g[4] > filters.price[1])) return false;
+            const logRev = Math.log10(Math.max(1, g[3])) * 10; // match slider scale
+            if (logRev < filters.reviews[0] || (filters.reviews[1] < 70 && logRev > filters.reviews[1])) return false;
+            return true;
+        }
+
+        function checkFilterActive() {
+            filterActive = (
+                filters.year[0] > FILTER_DEFAULTS.year[0] || filters.year[1] < FILTER_DEFAULTS.year[1] ||
+                filters.rating[0] > FILTER_DEFAULTS.rating[0] || filters.rating[1] < FILTER_DEFAULTS.rating[1] ||
+                filters.price[0] > FILTER_DEFAULTS.price[0] || filters.price[1] < FILTER_DEFAULTS.price[1] ||
+                filters.reviews[0] > FILTER_DEFAULTS.reviews[0] || filters.reviews[1] < FILTER_DEFAULTS.reviews[1]
+            );
+        }
+
+        function updateFilterUI() {
+            // Year label
+            const yvEl = document.getElementById('fv-year');
+            yvEl.textContent = filters.year[0] + ' – ' + filters.year[1];
+            yvEl.classList.toggle('active', filters.year[0] > 2005 || filters.year[1] < 2025);
+            // Rating label
+            const rvEl = document.getElementById('fv-rating');
+            rvEl.textContent = filters.rating[0] + '% – ' + filters.rating[1] + '%';
+            rvEl.classList.toggle('active', filters.rating[0] > 0 || filters.rating[1] < 100);
+            // Price label
+            const pvEl = document.getElementById('fv-price');
+            pvEl.textContent = '$' + filters.price[0] + ' – ' + (filters.price[1] >= 70 ? '$70+' : '$' + filters.price[1]);
+            pvEl.classList.toggle('active', filters.price[0] > 0 || filters.price[1] < 70);
+            // Reviews label
+            const revEl = document.getElementById('fv-reviews');
+            revEl.textContent = formatReviewCount(filters.reviews[0]) + ' – ' + (filters.reviews[1] >= 70 ? '10M+' : formatReviewCount(filters.reviews[1]));
+            revEl.classList.toggle('active', filters.reviews[0] > 0 || filters.reviews[1] < 70);
+
+            // Fill bars
+            updateFillBar('year', 2005, 2025);
+            updateFillBar('rating', 0, 100);
+            updateFillBar('price', 0, 70);
+            updateFillBar('reviews', 0, 70);
+
+            // Count
+            if (allGames) {
+                const matching = filterActive ? allGames.filter(gamePassesFilter).length : allGames.length;
+                const countEl = document.getElementById('filter-count');
+                countEl.textContent = filterActive ? matching.toLocaleString() + ' / ' + allGames.length.toLocaleString() : '';
+            }
+        }
+
+        function updateFillBar(name, absMin, absMax) {
+            const fill = document.getElementById('ff-' + name);
+            const range = absMax - absMin;
+            const left = ((filters[name][0] - absMin) / range) * 100;
+            const right = 100 - ((filters[name][1] - absMin) / range) * 100;
+            fill.style.left = left + '%';
+            fill.style.right = right + '%';
+        }
+
+        function zoomToFiltered() {
+            if (!xScale || !yScale || !filterActive) {
+                d3.select(canvas).transition().duration(500)
+                    .call(zoomBehavior.transform, d3.zoomIdentity);
+                return;
+            }
+            // Compute bounds from filter ranges (use scatter axes, not data)
+            const yearMin = filters.year[0] - 0.5;
+            const yearMax = filters.year[1] + 0.5;
+            const rateMin = filters.rating[0] - 2;
+            const rateMax = filters.rating[1] + 2;
+
+            const x0 = xScale(yearMin);
+            const x1 = xScale(yearMax);
+            const y0 = yScale(Math.min(100, rateMax)); // yScale inverted
+            const y1 = yScale(Math.max(0, rateMin));
+
+            const rangeW = x1 - x0;
+            const rangeH = y1 - y0;
+            if (rangeW < 1 || rangeH < 1) return;
+
+            const k = Math.min(width / rangeW, height / rangeH) * 0.8;
+            const cx = (x0 + x1) / 2;
+            const cy = (y0 + y1) / 2;
+            const tx = width / 2 - cx * k;
+            const ty = height / 2 - cy * k;
+
+            const t = d3.zoomIdentity.translate(tx, ty).scale(k);
+            d3.select(canvas).transition().duration(500).call(zoomBehavior.transform, t);
+        }
+
+        function initFilterPanel() {
+            const panel = document.getElementById('controls-panel');
+            panel.style.display = 'block';
+
+            // Toggle collapse (now handled by onclick in HTML + toggleLegend function)
+
+            // Wire up each slider pair
+            const sliderDefs = [
+                { name: 'year', min: 2005, max: 2025 },
+                { name: 'rating', min: 0, max: 100 },
+                { name: 'price', min: 0, max: 70 },
+                { name: 'reviews', min: 0, max: 70 },
+            ];
+            for (const def of sliderDefs) {
+                const minInput = document.getElementById('fr-' + def.name + '-min');
+                const maxInput = document.getElementById('fr-' + def.name + '-max');
+
+                function onSlide() {
+                    let lo = parseFloat(minInput.value);
+                    let hi = parseFloat(maxInput.value);
+                    if (lo > hi) { // Constrain: min can't exceed max
+                        if (this === minInput) { lo = hi; minInput.value = lo; }
+                        else { hi = lo; maxInput.value = hi; }
+                    }
+                    filters[def.name] = [lo, hi];
+                    checkFilterActive();
+                    updateFilterUI();
+                    render();
+                    // Notify active view module of filter change
+                    const activeTab = window._steamActiveTab ? window._steamActiveTab() : 'scatter';
+                    if (activeTab !== 'scatter' && window._steamViews && window._steamViews[activeTab] && window._steamViews[activeTab].onFilterChange) {
+                        window._steamViews[activeTab].onFilterChange();
+                    }
+                    // Debounce the zoom so it doesn't fight with fast slider dragging
+                    clearTimeout(zoomDebounce);
+                    zoomDebounce = setTimeout(zoomToFiltered, 250);
+                }
+                minInput.addEventListener('input', onSlide);
+                maxInput.addEventListener('input', onSlide);
+            }
+
+            // Reset button
+            document.getElementById('filter-reset').addEventListener('click', () => {
+                filters = { year: [2005, 2025], rating: [0, 100], price: [0, 70], reviews: [0, 70] };
+                filterActive = false;
+                activeGenre = null;
+                document.querySelectorAll('.genre-pill').forEach(p => p.classList.remove('active'));
+                updateGenreCount();
+                // Reset slider positions
+                for (const def of sliderDefs) {
+                    document.getElementById('fr-' + def.name + '-min').value = def.min;
+                    document.getElementById('fr-' + def.name + '-max').value = def.max;
+                }
+                updateFilterUI();
+                render();
+                // Notify active view module of filter reset
+                const activeTab = window._steamActiveTab ? window._steamActiveTab() : 'scatter';
+                if (activeTab !== 'scatter' && window._steamViews && window._steamViews[activeTab] && window._steamViews[activeTab].onFilterChange) {
+                    window._steamViews[activeTab].onFilterChange();
+                }
+                d3.select(canvas).transition().duration(500)
+                    .call(zoomBehavior.transform, d3.zoomIdentity);
+            });
+
+            updateFilterUI();
+        }
+
+        // ═══════════════════════════════════
+        // MOBILE SEARCH TOGGLE
+        // ═══════════════════════════════════
+        const searchToggle = document.getElementById('search-toggle');
+        const searchFieldEl = document.getElementById('search-field');
+
+        searchToggle.addEventListener('click', () => {
+            searchFieldEl.classList.toggle('expanded');
+            if (searchFieldEl.classList.contains('expanded')) {
+                searchInput.focus();
+            } else {
+                searchInput.blur();
+                searchResults.classList.remove('visible');
+            }
+        });
+
+        // Collapse search on mobile when clicking outside
+        document.addEventListener('click', (e) => {
+            if (window.innerWidth <= 768 &&
+                !e.target.closest('#search-wrap') &&
+                searchFieldEl.classList.contains('expanded')) {
+                searchFieldEl.classList.remove('expanded');
+            }
+        });
+
+    })();
+    </script>
+
+    <!-- ═══ VIEW MODULES ═══ -->
+    <script src="chord.js?v=15"></script>
+    <script src="force.js?v=12"></script>
+    <script src="timeline.js?v=3"></script>
+
+    <script>
+    // ═══════════════════════════════════
+    // TAB SWITCHING
+    // ═══════════════════════════════════
+    (function() {
+        'use strict';
+        let activeTab = 'scatter';
+        const canvases = {
+            scatter: document.getElementById('canvas'),
+            chord: document.getElementById('canvas-chord'),
+            force: document.getElementById('canvas-force'),
+            timeline: document.getElementById('canvas-timeline'),
+        };
+
+        // Module registry — chord.js and force.js register themselves here
+        window._steamViews = window._steamViews || {};
+
+        document.getElementById('tab-bar').addEventListener('click', (e) => {
+            const btn = e.target.closest('.tab-btn');
+            if (!btn) return;
+            const tab = btn.dataset.tab;
+            if (tab === activeTab) return;
+
+            // Deactivate current
+            if (window._steamViews[activeTab] && window._steamViews[activeTab].deactivate) {
+                window._steamViews[activeTab].deactivate();
+            }
+
+            // Switch canvas visibility
+            Object.entries(canvases).forEach(([key, cv]) => {
+                cv.classList.toggle('hidden-tab', key !== tab);
+            });
+
+            // Update tab buttons
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+
+            activeTab = tab;
+
+            // Search is available on all tabs (scatter, force, tree)
+            // const searchWrap = document.getElementById('search-wrap');
+            // if (searchWrap) searchWrap.style.display = tab === 'scatter' ? '' : 'none';
+
+            // Legend section (color mode, swatches) only on scatter
+            const legendSection = document.getElementById('legend-section');
+            if (legendSection) legendSection.style.display = tab === 'scatter' ? '' : 'none';
+
+            // Network section inside controls: visible only on force tab
+            const netSection = document.getElementById('network-section');
+            if (netSection) netSection.style.display = tab === 'force' ? '' : 'none';
+
+            // Density section only on scatter (Universe)
+            const densitySection = document.getElementById('density-section');
+            if (densitySection) densitySection.style.display = tab === 'scatter' ? '' : 'none';
+
+            // Controls panel: visible on scatter & force, hidden on chord (chord has its own UI)
+            const controlsPanel = document.getElementById('controls-panel');
+            if (controlsPanel) controlsPanel.style.display = (tab === 'scatter' || tab === 'force') ? 'block' : 'none';
+
+            // Activate new view
+            if (window._steamViews[tab]) {
+                if (!window._steamViews[tab]._initialized) {
+                    window._steamViews[tab].init();
+                    window._steamViews[tab]._initialized = true;
+                }
+                window._steamViews[tab].activate();
+            }
+        });
+
+        // Expose for other modules
+        window._steamActiveTab = () => activeTab;
+        window._steamCanvases = canvases;
+    })();
+    </script>
+</body>
+</html>

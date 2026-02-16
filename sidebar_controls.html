@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compact Sidebar Controls for Data Visualization</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+        }
+
+        .sidebar {
+            width: 250px;
+            background-color: #f5f5f5;
+            padding: 10px;
+            height: 100vh;
+            overflow-y: auto;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .slider-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .slider-container {
+            position: relative;
+            width: 100%;
+        }
+
+        .slider-label {
+            font-size: 12px;
+            font-weight: bold;
+            display: inline-block;
+            margin-bottom: 2px;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 8px;
+            -webkit-appearance: none;
+            background: #ddd;
+            border-radius: 4px;
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #007BFF;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .slider-value {
+            font-size: 12px;
+            position: absolute;
+            top: -2px;
+            right: 0;
+            background: #007BFF;
+            color: white;
+            padding: 0px 4px;
+            border-radius: 4px;
+        }
+
+        .filter-pills {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+
+        .pill {
+            width: 30px;
+            height: 30px;
+            border: 1px solid #ccc;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            background-color: #eee;
+            font-size: 14px;
+        }
+
+        .pill:hover {
+            background-color: #ddd;
+        }
+
+        .pill.active {
+            background-color: #007BFF;
+            color: white;
+        }
+
+        .density-control {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .density-icon {
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        .color-mode {
+            display: flex;
+            gap: 5px;
+        }
+
+        .legend, .info-panel {
+            position: relative;
+            background: white;
+            border: 1px solid #ccc;
+            padding: 5px;
+            font-size: 12px;
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+
+        .legend:hover, .info-panel:hover {
+            max-height: 200px;
+        }
+
+        .control-header {
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="slider-grid">
+            <div class="slider-container">
+                <div class="slider-label">Year</div>
+                <input type="range" id="year-slider" min="2000" max="2023" value="2010">
+                <span class="slider-value" id="year-value">2010</span>
+            </div>
+            <div class="slider-container">
+                <div class="slider-label">Rating</div>
+                <input type="range" id="rating-slider" min="0" max="10" value="5">
+                <span class="slider-value" id="rating-value">5</span>
+            </div>
+            <div class="slider-container">
+                <div class="slider-label">Price ($)</div>
+                <input type="range" id="price-slider" min="0" max="100" value="50">
+                <span class="slider-value" id="price-value">50</span>
+            </div>
+            <div class="slider-container">
+                <div class="slider-label">Reviews</div>
+                <input type="range" id="reviews-slider" min="0" max="1000" value="500">
+                <span class="slider-value" id="reviews-value">500</span>
+            </div>
+        </div>
+
+        <div class="filter-pills">
+            <div class="pill" title="Action">A</div>
+            <div class="pill" title="Drama">D</div>
+            <div class="pill" title="Comedy">C</div>
+            <div class="pill" title="Sci-Fi">SF</div>
+        </div>
+
+        <div class="density-control">
+            <div class="density-icon" title="Network Density">⚙️</div>
+            <input type="range" id="density-slider" min="0" max="100" value="50" style="width: 80px;">
+        </div>
+
+        <div class="color-mode">
+            <div class="pill" title="Light Mode">☀️</div>
+            <div class="pill active" title="Dark Mode">🌙</div>
+        </div>
+
+        <div class="legend">
+            <div class="control-header">Legend</div>
+            <div>Color: Category</div>
+            <div>Size: Popularity</div>
+        </div>
+
+        <div class="info-panel">
+            <div class="control-header">Info</div>
+            <div>Data updated: Oct 2023</div>
+            <div>Source: Example DB</div>
+        </div>
+    </div>
+
+    <script>
+        // Update slider value displays
+        const sliders = ['year', 'rating', 'price', 'reviews'];
+        sliders.forEach(slider => {
+            const input = document.getElementById(`${slider}-slider`);
+            const valueDisplay = document.getElementById(`${slider}-value`);
+            input.addEventListener('input', () => {
+                valueDisplay.textContent = input.value;
+            });
+        });
+
+        // Toggle active state for pills
+        document.querySelectorAll('.pill').forEach(pill => {
+            pill.addEventListener('click', () => {
+                pill.classList.toggle('active');
+            });
+        });
+    </script>
+</body>
+</html>
