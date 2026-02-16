@@ -9,6 +9,22 @@
     <meta http-equiv="Expires" content="0">
     <title>Steam Universe: 80,000+ Games Visualized</title>
     <meta name="description" content="Interactive visualization of 80,000+ Steam games from 2005-2025. Year vs approval scatter with co-review network overlay showing how top games are connected by shared players.">
+
+    <!-- Open Graph / Social Media -->
+    <meta property="og:title" content="Steam Universe: 80,000+ Games Visualized">
+    <meta property="og:description" content="Interactive visualization of 80,000+ Steam games from 2005-2025. Year vs approval scatter with co-review network overlay showing how top games are connected by shared players.">
+    <meta property="og:image" content="https://dr.eamer.dev/datavis/interactive/steam/steam-universe-social.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://dr.eamer.dev/datavis/interactive/steam/">
+    <meta property="og:type" content="website">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Steam Universe: 80,000+ Games Visualized">
+    <meta name="twitter:description" content="Interactive visualization of 80,000+ Steam games from 2005-2025. Year vs approval scatter with co-review network overlay showing how top games are connected by shared players.">
+    <meta name="twitter:image" content="https://dr.eamer.dev/datavis/interactive/steam/steam-universe-social.png">
+
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -960,7 +976,7 @@
         // ═══════════════════════════════════
         // DATA LOADING
         // ═══════════════════════════════════
-        const _v = 'v=24';  // Bump to bust browser cache after data changes
+        const _v = 'v=25';  // Bump to bust browser cache after data changes
 
         (async () => {
             const t0 = performance.now();
