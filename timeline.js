@@ -35,7 +35,7 @@
     const CONDENSE_BREAK = 2014;      // Year where condensed switches to full
     const PAD_LEFT = 60;
     const PAD_RIGHT = 40;
-    const PAD_TOP = 70;
+    const PAD_TOP = 120;  // Increased to clear sidebar controls panel
     const PAD_BOTTOM = 50;
 
     // Hover
