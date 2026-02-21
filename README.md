@@ -6,7 +6,7 @@
 
 Interactive force-directed graph of the Steam game library — ~82,000 games connected by shared players, genre, and developer relationships.
 
-![Steam Network Visualization](https://raw.githubusercontent.com/lukeslp/steam-network-visualization/main/social-card.png)
+![Steam Network Visualization](https://raw.githubusercontent.com/lukeslp/steam-network-visualization/master/social-card.png)
 
 **[Launch the visualization →](https://dr.eamer.dev/datavis/interactive/steam/)**
 
