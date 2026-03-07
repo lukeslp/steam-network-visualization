@@ -29,6 +29,10 @@ Game and connection data sourced from the Steam public API and processed into a 
 - **Canvas 2D** — High-performance rendering for 82K+ nodes
 - **Vanilla JavaScript** — No framework dependencies
 
+## Author
+
+**Luke Steuber** · [lukesteuber.com](https://lukesteuber.com) · [@lukesteuber.com](https://bsky.app/profile/lukesteuber.com)
+
 ## License
 
 MIT
