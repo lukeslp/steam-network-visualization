@@ -19,6 +19,25 @@ Interactive force-directed graph of the Steam game library — ~82,000 games con
 - **Search** — Jump directly to any game by name
 - **Zoom and pan** — Navigate the full network at any scale
 
+## Running locally
+
+No build step required — this is vanilla JavaScript served as static files.
+
+```bash
+git clone https://github.com/lukeslp/steam-network-visualization.git
+cd steam-network-visualization
+python3 -m http.server 8000
+# open http://localhost:8000
+```
+
+Or with Node:
+
+```bash
+npx serve .
+```
+
+The data files are bundled in the repo — no external API calls needed to run it locally.
+
 ## Data
 
 Game and connection data sourced from the Steam public API and processed into a network graph format. Raw data available in the companion [steam-network-data](https://github.com/lukeslp/steam-network-data) repository.
