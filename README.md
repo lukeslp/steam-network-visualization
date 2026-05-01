@@ -21,7 +21,7 @@ Interactive force-directed graph of the Steam game library: ~82,000 games connec
 
 ## Running locally
 
-No build step required — this is vanilla JavaScript served as static files.
+No build step required: this is vanilla JavaScript served as static files.
 
 ```bash
 git clone https://github.com/lukeslp/steam-network-visualization.git
@@ -36,7 +36,7 @@ Or with Node:
 npx serve .
 ```
 
-The data files are bundled in the repo — no external API calls needed to run it locally.
+The data files are bundled in the repo; no external API calls needed to run it locally.
 
 ## Data
 
