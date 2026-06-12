@@ -1,10 +1,7 @@
 (function() {
   'use strict';
 
-  const GENRE_COLORS = [
-    '#4ade80', '#60a5fa', '#f97316', '#a78bfa', '#22d3ee', '#facc15',
-    '#fb7185', '#34d399', '#c084fc', '#f472b6', '#38bdf8', '#fbbf24'
-  ];
+  const tip = SteamViz.makeTooltip();
 
   let canvas, ctx, width, height, dpr;
   let drillLevel = 0; // 0: genres, 1: developers, 2: games
@@ -13,7 +10,7 @@
   let animationProgress = 1; // 0-1 for transitions
   let isAnimating = false;
   let hoveredItem = null;
-  let tooltip = null;
+  let unbindHover = null;
 
   function init() {
     if (window._steamViews.flower._initialized) return;
@@ -24,33 +21,17 @@
       return;
     }
 
-    ctx = canvas.getContext('2d');
-    dpr = window.devicePixelRatio || 1;
-
-    // Create tooltip
-    tooltip = document.createElement('div');
-    tooltip.style.cssText = `
-      position: fixed;
-      background: rgba(0,0,0,0.9);
-      color: white;
-      padding: 8px 12px;
-      border-radius: 4px;
-      font-size: 13px;
-      pointer-events: none;
-      opacity: 0;
-      transition: opacity 0.2s;
-      z-index: 1000;
-      max-width: 300px;
-      white-space: pre-line;
-    `;
-    document.body.appendChild(tooltip);
+    const setup = SteamViz.setupCanvas(canvas);
+    ctx = setup.ctx;
+    width = setup.width;
+    height = setup.height;
+    dpr = setup.dpr;
 
     // Event listeners
-    canvas.addEventListener('mousemove', onMouseMove);
     canvas.addEventListener('click', onClick);
     canvas.addEventListener('mouseleave', () => {
       hoveredItem = null;
-      hideTooltip();
+      tip.hide();
       scheduleRender();
     });
 
@@ -66,12 +47,19 @@
     isAnimating = false;
     hoveredItem = null;
     resize();
+    if (!unbindHover) {
+      unbindHover = SteamViz.bindPointerHover(canvas, handleHover);
+    }
     scheduleRender();
   }
 
   function deactivate() {
-    hideTooltip();
+    tip.hide();
     hoveredItem = null;
+    if (unbindHover) {
+      unbindHover();
+      unbindHover = null;
+    }
   }
 
   function onFilterChange() {
@@ -79,12 +67,11 @@
   }
 
   function resize() {
-    const rect = canvas.getBoundingClientRect();
-    width = rect.width;
-    height = rect.height;
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-    ctx.scale(dpr, dpr);
+    const setup = SteamViz.setupCanvas(canvas);
+    ctx = setup.ctx;
+    width = setup.width;
+    height = setup.height;
+    dpr = setup.dpr;
   }
 
   let renderScheduled = false;
@@ -97,10 +84,9 @@
     });
   }
 
-  function onMouseMove(e) {
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+  function handleHover(p) {
+    const x = p.x;
+    const y = p.y;
 
     const cx = width / 2;
     const cy = height / 2;
@@ -185,14 +171,13 @@
       hoveredItem = newHovered;
       scheduleRender();
       if (hoveredItem) {
-        showTooltip(e.clientX, e.clientY);
+        showTooltip(p.clientX, p.clientY);
       } else {
-        hideTooltip();
+        tip.hide();
       }
     } else if (hoveredItem) {
       // Update tooltip position
-      tooltip.style.left = (e.clientX + 15) + 'px';
-      tooltip.style.top = (e.clientY + 15) + 'px';
+      showTooltip(p.clientX, p.clientY);
     }
   }
 
@@ -336,7 +321,7 @@
         endAngle,
         innerRadius: 80,
         outerRadius,
-        color: GENRE_COLORS[i % GENRE_COLORS.length]
+        color: SteamViz.genreColor(i)
       });
 
       currentAngle = endAngle;
@@ -774,16 +759,7 @@
       }
     }
 
-    tooltip.innerHTML = html;
-    tooltip.style.left = (x + 15) + 'px';
-    tooltip.style.top = (y + 15) + 'px';
-    tooltip.style.opacity = '1';
-  }
-
-  function hideTooltip() {
-    if (tooltip) {
-      tooltip.style.opacity = '0';
-    }
+    tip.show(html, x, y);
   }
 
   // Export module

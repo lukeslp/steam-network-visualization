@@ -22,14 +22,12 @@
 
   // Interaction state
   let hoveredNode = null;
-  let tooltip = null;
 
-  // Genre color palette
-  const GENRE_COLORS = [
-    '#4ade80', '#60a5fa', '#f97316', '#a78bfa',
-    '#22d3ee', '#facc15', '#fb7185', '#34d399',
-    '#c084fc', '#f472b6', '#38bdf8', '#fbbf24'
-  ];
+  // Shared tooltip (viewport-clamped, reusable)
+  const tip = SteamViz.makeTooltip();
+
+  // Touch/pointer hover unbind handle (set in activate, cleared in deactivate)
+  let unbindPointerHover = null;
 
   /**
    * One-time initialization
@@ -41,25 +39,6 @@
       return;
     }
     ctx = canvas.getContext('2d');
-
-    // Create tooltip
-    tooltip = document.createElement('div');
-    tooltip.className = 'viz-tooltip';
-    tooltip.style.cssText = `
-      position: fixed;
-      pointer-events: none;
-      background: rgba(10, 10, 10, 0.95);
-      border: 1px solid #444;
-      border-radius: 6px;
-      padding: 8px 12px;
-      font-size: 13px;
-      line-height: 1.5;
-      color: #ddd;
-      display: none;
-      z-index: 10000;
-      max-width: 300px;
-    `;
-    document.body.appendChild(tooltip);
 
     // Set up zoom behavior
     zoomBehavior = d3.zoom()
@@ -85,6 +64,12 @@
     resize();
     buildHierarchy();
     render();
+
+    // Wire touch (and pointer) hover for node highlight + tooltip.
+    // Mouse hover stays on the native mousemove listener in init().
+    if (!unbindPointerHover) {
+      unbindPointerHover = SteamViz.bindPointerHover(canvas, (p) => handleHover(p));
+    }
   }
 
   /**
@@ -92,8 +77,12 @@
    */
   function deactivate() {
     active = false;
-    tooltip.style.display = 'none';
+    tip.hide();
     hoveredNode = null;
+    if (unbindPointerHover) {
+      unbindPointerHover();
+      unbindPointerHover = null;
+    }
   }
 
   /**
@@ -247,7 +236,7 @@
         genreIdx = link.target.parent.parent.data.genreIdx;
       }
 
-      const color = genreIdx !== undefined ? GENRE_COLORS[genreIdx % GENRE_COLORS.length] : '#888';
+      const color = genreIdx !== undefined ? SteamViz.genreColor(genreIdx) : '#888';
 
       ctx.strokeStyle = color + '4d'; // 30% opacity
       ctx.beginPath();
@@ -291,7 +280,7 @@
           genreIdx = node.parent.parent.data.genreIdx;
         }
 
-        const baseColor = genreIdx !== undefined ? GENRE_COLORS[genreIdx % GENRE_COLORS.length] : '#888';
+        const baseColor = genreIdx !== undefined ? SteamViz.genreColor(genreIdx) : '#888';
 
         if (node.depth === 1) fillColor = baseColor; // genre
         else if (node.depth === 2) fillColor = baseColor + '99'; // tag (60% opacity)
@@ -382,11 +371,21 @@
    * Handle mouse movement for hover effects
    */
   function handleMouseMove(e) {
+    handleHover(SteamViz.pointerPos(canvas, e));
+  }
+
+  /**
+   * Shared hover handler for mouse and touch.
+   * `p` is a pointerPos: { x, y, clientX, clientY }, where x/y are relative to
+   * the canvas (equivalent to clientX/Y minus the canvas bounding-rect origin).
+   */
+  function handleHover(p) {
     if (!active || !rootNode) return;
 
-    const rect = canvas.getBoundingClientRect();
-    const mx = (e.clientX - rect.left - transform.x) / transform.k - width / 2 / transform.k;
-    const my = (e.clientY - rect.top - transform.y) / transform.k - height / 2 / transform.k;
+    // Undo the d3 zoom transform exactly as the original mouse handler did,
+    // using canvas-relative coordinates from pointerPos.
+    const mx = (p.x - transform.x) / transform.k - width / 2 / transform.k;
+    const my = (p.y - transform.y) / transform.k - height / 2 / transform.k;
 
     // Find closest node within threshold
     let closest = null;
@@ -410,13 +409,9 @@
 
     // Update tooltip
     if (hoveredNode) {
-      const tooltipContent = getTooltipContent(hoveredNode);
-      tooltip.innerHTML = tooltipContent;
-      tooltip.style.display = 'block';
-      tooltip.style.left = (e.clientX + 15) + 'px';
-      tooltip.style.top = (e.clientY + 15) + 'px';
+      tip.show(getTooltipContent(hoveredNode), p.clientX, p.clientY);
     } else {
-      tooltip.style.display = 'none';
+      tip.hide();
     }
   }
 
@@ -516,7 +511,7 @@
   function handleMouseLeave() {
     if (hoveredNode) {
       hoveredNode = null;
-      tooltip.style.display = 'none';
+      tip.hide();
       render();
     }
   }
@@ -525,13 +520,11 @@
    * Resize canvas
    */
   function resize() {
-    const rect = canvas.getBoundingClientRect();
-    width = rect.width;
-    height = rect.height;
-    dpr = window.devicePixelRatio || 1;
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const setup = SteamViz.setupCanvas(canvas);
+    ctx = setup.ctx;
+    width = setup.width;
+    height = setup.height;
+    dpr = setup.dpr;
 
     if (active) {
       buildHierarchy();

@@ -18,10 +18,6 @@
   const COL_POSITIONS = [0.34, 0.56, 0.82]; // x positions — left column clears Controls panel
 
   // Color palettes
-  const GENRE_COLORS = [
-    '#4ade80', '#60a5fa', '#f97316', '#a78bfa', '#22d3ee', '#facc15',
-    '#fb7185', '#34d399', '#c084fc', '#f472b6', '#38bdf8', '#fbbf24'
-  ];
   const RATING_COLORS = ['#4ade80', '#facc15', '#f97316', '#ef4444'];
   const RATING_NAMES = ['Great (80-100%)', 'Good (60-79%)', 'Mixed (40-59%)', 'Poor (0-39%)'];
   const PRICE_COLORS = ['#60a5fa', '#22d3ee', '#2dd4bf', '#a78bfa', '#fbbf24'];
@@ -34,7 +30,10 @@
   let hoveredFlow = null;
 
   // Tooltip
-  let tooltip = null;
+  const tip = SteamViz.makeTooltip();
+
+  // Pointer hover unbind handle
+  let unbindHover = null;
 
   /**
    * One-time initialization
@@ -47,27 +46,7 @@
     }
     ctx = canvas.getContext('2d');
 
-    // Create tooltip
-    tooltip = document.createElement('div');
-    tooltip.className = 'sankey-tooltip';
-    tooltip.style.cssText = `
-      position: fixed;
-      pointer-events: none;
-      background: rgba(10, 10, 10, 0.95);
-      border: 1px solid #444;
-      border-radius: 6px;
-      padding: 8px 12px;
-      font-size: 13px;
-      line-height: 1.5;
-      color: #ddd;
-      display: none;
-      z-index: 10000;
-      max-width: 280px;
-    `;
-    document.body.appendChild(tooltip);
-
-    // Event listeners
-    canvas.addEventListener('mousemove', handleMouseMove);
+    // Mouse leave still bound here; pointer hover wiring happens in activate()
     canvas.addEventListener('mouseleave', handleMouseLeave);
   }
 
@@ -77,6 +56,9 @@
   function activate() {
     if (!canvas) init();
     active = true;
+    if (!unbindHover) {
+      unbindHover = SteamViz.bindPointerHover(canvas, (p) => handleHover(p));
+    }
     resize();
     buildFlowData();
     render();
@@ -87,6 +69,10 @@
    */
   function deactivate() {
     active = false;
+    if (unbindHover) {
+      unbindHover();
+      unbindHover = null;
+    }
     hideTooltip();
   }
 
@@ -103,12 +89,11 @@
    * Resize canvas to current dimensions
    */
   function resize() {
-    const rect = canvas.getBoundingClientRect();
-    width = rect.width;
-    height = rect.height;
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-    ctx.scale(dpr, dpr);
+    const c = SteamViz.setupCanvas(canvas);
+    ctx = c.ctx;
+    width = c.width;
+    height = c.height;
+    dpr = c.dpr;
   }
 
   /**
@@ -181,7 +166,7 @@
     nodes.genres = topGenreIndices.map((idx, i) => ({
       id: `g${idx}`,
       label: genreNames[idx] || `Genre ${idx}`,
-      color: GENRE_COLORS[i % GENRE_COLORS.length],
+      color: SteamViz.genreColor(i),
       value: genreCounts.get(idx) || 0,
       column: 0,
     }));
@@ -432,12 +417,12 @@
   }
 
   /**
-   * Mouse move handler
+   * Pointer hover handler (mouse + touch)
+   * @param {{x:number, y:number, clientX:number, clientY:number}} p normalized pointer
    */
-  function handleMouseMove(e) {
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
+  function handleHover(p) {
+    const mouseX = p.x;
+    const mouseY = p.y;
 
     // Check node hover
     let foundNode = null;
@@ -466,9 +451,9 @@
       render();
 
       if (foundNode) {
-        showNodeTooltip(foundNode, e.clientX, e.clientY);
+        showNodeTooltip(foundNode, p.clientX, p.clientY);
       } else if (foundFlow) {
-        showFlowTooltip(foundFlow, e.clientX, e.clientY);
+        showFlowTooltip(foundFlow, p.clientX, p.clientY);
       } else {
         hideTooltip();
       }
@@ -526,14 +511,12 @@
     const total = flows.reduce((sum, f) => sum + f.value, 0);
     const pct = ((node.value / total) * 100).toFixed(1);
 
-    tooltip.innerHTML = `
+    const html = `
       <div style="font-weight: 600; margin-bottom: 4px;">${node.label}</div>
       <div>${node.value.toLocaleString()} games (${pct}%)</div>
     `;
 
-    tooltip.style.display = 'block';
-    tooltip.style.left = (clientX + 12) + 'px';
-    tooltip.style.top = (clientY + 12) + 'px';
+    tip.show(html, clientX, clientY);
   }
 
   /**
@@ -543,23 +526,21 @@
     const total = flows.reduce((sum, f) => sum + f.value, 0);
     const pct = ((flow.value / total) * 100).toFixed(1);
 
-    tooltip.innerHTML = `
+    const html = `
       <div style="font-weight: 600; margin-bottom: 4px;">
         ${flow.from.label} → ${flow.to.label}
       </div>
       <div>${flow.value.toLocaleString()} games (${pct}%)</div>
     `;
 
-    tooltip.style.display = 'block';
-    tooltip.style.left = (clientX + 12) + 'px';
-    tooltip.style.top = (clientY + 12) + 'px';
+    tip.show(html, clientX, clientY);
   }
 
   /**
    * Hide tooltip
    */
   function hideTooltip() {
-    tooltip.style.display = 'none';
+    tip.hide();
   }
 
   // Expose public API

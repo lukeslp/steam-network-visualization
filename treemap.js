@@ -48,12 +48,17 @@
 
   // Interaction state
   let hoveredDev = null;
-  let tooltip = null;
+  const tip = SteamViz.makeTooltip();
+
+  // Touch/pointer hover unbinder (set in activate, cleared in deactivate)
+  let unbindHover = null;
 
   /**
    * One-time initialization
    */
   function init() {
+    if (window._steamViews.treemap._initialized) return;
+
     canvas = document.getElementById('canvas-treemap');
     if (!canvas) {
       console.error('Canvas element canvas-treemap not found');
@@ -61,27 +66,7 @@
     }
     ctx = canvas.getContext('2d');
 
-    // Create tooltip
-    tooltip = document.createElement('div');
-    tooltip.className = 'viz-tooltip';
-    tooltip.style.cssText = `
-      position: fixed;
-      pointer-events: none;
-      background: rgba(10, 10, 10, 0.95);
-      border: 1px solid #444;
-      border-radius: 6px;
-      padding: 8px 12px;
-      font-size: 13px;
-      line-height: 1.5;
-      color: #ddd;
-      display: none;
-      z-index: 10000;
-      max-width: 300px;
-    `;
-    document.body.appendChild(tooltip);
-
     // Event listeners
-    canvas.addEventListener('mousemove', handleMouseMove);
     canvas.addEventListener('click', handleClick);
     canvas.addEventListener('mouseleave', handleMouseLeave);
 
@@ -94,6 +79,8 @@
       .padding(2)
       .paddingTop(18)
       .round(true);
+
+    window._steamViews.treemap._initialized = true;
   }
 
   /**
@@ -179,6 +166,11 @@
     computeHierarchy();
     render();
 
+    // Wire pointer hover (mouse + touch) for cell highlight + tooltip
+    if (canvas && !unbindHover) {
+      unbindHover = SteamViz.bindPointerHover(canvas, (p) => handleHover(p));
+    }
+
     // Show size mode switcher
     const switcher = document.getElementById('treemap-size-switcher');
     if (switcher) {
@@ -193,7 +185,13 @@
   function deactivate() {
     active = false;
     hoveredDev = null;
-    tooltip.style.display = 'none';
+    tip.hide();
+
+    // Unbind pointer hover
+    if (unbindHover) {
+      unbindHover();
+      unbindHover = null;
+    }
 
     // Hide size mode switcher
     const switcher = document.getElementById('treemap-size-switcher');
@@ -215,13 +213,11 @@
    * Resize canvas to match display size
    */
   function resizeCanvas() {
-    const rect = canvas.getBoundingClientRect();
-    width = rect.width;
-    height = rect.height;
-
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-    ctx.scale(dpr, dpr);
+    const setup = SteamViz.setupCanvas(canvas);
+    ctx = setup.ctx;
+    width = setup.width;
+    height = setup.height;
+    dpr = setup.dpr;
   }
 
   /**
@@ -447,8 +443,7 @@
    * Get genre color (simple hash-based)
    */
   function getGenreColor(genreIdx) {
-    const colors = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#95a5a6'];
-    return colors[Math.abs(genreIdx) % colors.length] || '#888';
+    return SteamViz.genreColor(genreIdx);
   }
 
   /**
@@ -511,14 +506,13 @@
   }
 
   /**
-   * Handle mouse move
+   * Handle pointer hover (mouse or touch): cell highlight + tooltip
    */
-  function handleMouseMove(e) {
+  function handleHover(p) {
     if (!rootNode) return;
 
-    const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left) * (width / rect.width);
-    const y = (e.clientY - rect.top) * (height / rect.height);
+    const x = p.x;
+    const y = p.y;
 
     // Find hovered developer
     const developerNodes = zoomedGenre
@@ -534,14 +528,13 @@
       render();
 
       if (hoveredDev) {
-        showTooltip(hoveredDev, e.clientX, e.clientY);
+        showTooltip(hoveredDev, p.clientX, p.clientY);
       } else {
-        tooltip.style.display = 'none';
+        tip.hide();
       }
     } else if (hoveredDev) {
       // Update tooltip position
-      tooltip.style.left = (e.clientX + 15) + 'px';
-      tooltip.style.top = (e.clientY + 15) + 'px';
+      showTooltip(hoveredDev, p.clientX, p.clientY);
     }
   }
 
@@ -613,7 +606,7 @@
    */
   function handleMouseLeave() {
     hoveredDev = null;
-    tooltip.style.display = 'none';
+    tip.hide();
     render();
   }
 
@@ -638,15 +631,13 @@
     html += `Avg Rating: ${devData.avgRating.toFixed(1)}% (${ratingName})<br>`;
     html += `Top Game: ${topGame[0]} (${topGame[3].toLocaleString()} reviews)`;
 
-    tooltip.innerHTML = html;
-    tooltip.style.display = 'block';
-    tooltip.style.left = (clientX + 15) + 'px';
-    tooltip.style.top = (clientY + 15) + 'px';
+    tip.show(html, clientX, clientY);
   }
 
   // Register module
   window._steamViews = window._steamViews || {};
   window._steamViews.treemap = {
+    _initialized: false,
     init,
     activate,
     deactivate,

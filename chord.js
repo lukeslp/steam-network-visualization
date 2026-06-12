@@ -11,8 +11,9 @@
     'use strict';
 
     const canvas = document.getElementById('canvas-chord');
-    const ctx = canvas.getContext('2d');
+    let ctx = canvas.getContext('2d');
     let width, height, dpr;
+    let unbindHover = null;
     let chordLayout = null;
     let labels = [];
     let colors = [];
@@ -36,14 +37,6 @@
         { name: 'Modern', range: [2021, 2025], color: '#f472b6' },
     ];
 
-    // Genre palette
-    const GENRE_PALETTE = [
-        '#4ade80', '#60a5fa', '#f97316', '#a78bfa', '#22d3ee',
-        '#facc15', '#fb7185', '#34d399', '#c084fc', '#f472b6',
-        '#38bdf8', '#fbbf24', '#a3e635', '#e879f9', '#2dd4bf',
-        '#818cf8',
-    ];
-
     // ── Mode 1: Genre Flow ──
     function computeGenreMatrix() {
         const data = window._steamData;
@@ -55,7 +48,7 @@
 
         const maxGenres = Math.min(14, genreNames.length);
         labels = genreNames.slice(0, maxGenres);
-        colors = GENRE_PALETTE.slice(0, maxGenres);
+        colors = SteamViz.GENRE_PALETTE.slice(0, maxGenres);
 
         const n = maxGenres;
         const m = Array.from({ length: n }, () => new Float64Array(n));
@@ -119,7 +112,7 @@
         });
 
         // Use genre palette colors
-        colors = GENRE_PALETTE.slice(0, maxGenres);
+        colors = SteamViz.GENRE_PALETTE.slice(0, maxGenres);
 
         const n = maxGenres;
         const m = Array.from({ length: n }, () => new Float64Array(n));
@@ -243,14 +236,11 @@
     }
 
     function resize() {
-        dpr = window.devicePixelRatio || 1;
-        width = window.innerWidth;
-        height = window.innerHeight;
-        canvas.width = width * dpr;
-        canvas.height = height * dpr;
-        canvas.style.width = width + 'px';
-        canvas.style.height = height + 'px';
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        const s = SteamViz.setupCanvas(canvas);
+        ctx = s.ctx;
+        width = s.width;
+        height = s.height;
+        dpr = s.dpr;
     }
 
     function render() {
@@ -401,7 +391,7 @@
             ctx.fillStyle = isActive ? 'rgba(100, 100, 100, 0.4)' : 'rgba(50, 50, 50, 0.3)';
             ctx.strokeStyle = isActive ? '#777' : '#444';
             ctx.lineWidth = 1;
-            roundRect(ctx, x, y, pillW, pillH, 6);
+            SteamViz.roundRect(ctx, x, y, pillW, pillH, 6);
             ctx.fill();
             ctx.stroke();
 
@@ -446,7 +436,7 @@
         ctx.lineWidth = 1;
         const rx = x - tw / 2 - pad;
         const ry = y - h / 2;
-        roundRect(ctx, rx, ry, tw + pad * 2, h, 6);
+        SteamViz.roundRect(ctx, rx, ry, tw + pad * 2, h, 6);
         ctx.fill();
         ctx.stroke();
 
@@ -458,20 +448,6 @@
         ctx.font = '11px -apple-system, sans-serif';
         ctx.fillStyle = '#888';
         ctx.fillText(subtitle, x, y + 10);
-    }
-
-    function roundRect(ctx, x, y, w, h, r) {
-        ctx.beginPath();
-        ctx.moveTo(x + r, y);
-        ctx.lineTo(x + w - r, y);
-        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-        ctx.lineTo(x + w, y + h - r);
-        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-        ctx.lineTo(x + r, y + h);
-        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-        ctx.lineTo(x, y + r);
-        ctx.quadraticCurveTo(x, y, x + r, y);
-        ctx.closePath();
     }
 
     function blendColor(c1, c2) {
@@ -572,10 +548,11 @@
         }, 20);
     }
 
-    function onMouseMove(e) {
-        const rect = canvas.getBoundingClientRect();
-        const mx = e.clientX - rect.left;
-        const my = e.clientY - rect.top;
+    // Receives a normalized pointer { x, y } in canvas-relative CSS px
+    // (from SteamViz.pointerPos via bindPointerHover) for mouse or touch.
+    function onPointerHover(p) {
+        const mx = p.x;
+        const my = p.y;
 
         // Check mode pills first
         const pill = hitTestPill(mx, my);
@@ -606,14 +583,20 @@
     }
 
     function onClick(e) {
-        const rect = canvas.getBoundingClientRect();
-        const mx = e.clientX - rect.left;
-        const my = e.clientY - rect.top;
-
-        const pill = hitTestPill(mx, my);
+        const p = SteamViz.pointerPos(canvas, e);
+        const pill = hitTestPill(p.x, p.y);
         if (pill) {
             switchMode(pill);
         }
+    }
+
+    // Tap (touch) → switch mode if a pill was tapped
+    function onTouchEnd(e) {
+        const touch = e.changedTouches && e.changedTouches[0];
+        if (!touch) return;
+        const p = SteamViz.pointerPos(canvas, e);
+        const pill = hitTestPill(p.x, p.y);
+        if (pill) switchMode(pill);
     }
 
     function onMouseLeave() {
@@ -636,8 +619,8 @@
             resize();
             computeMatrix();
             computeChordLayout();
-            canvas.addEventListener('mousemove', onMouseMove);
             canvas.addEventListener('click', onClick);
+            canvas.addEventListener('touchend', onTouchEnd);
             canvas.addEventListener('mouseleave', onMouseLeave);
             window.addEventListener('resize', onResize);
         },
@@ -648,11 +631,19 @@
             resize();
             computeMatrix();
             computeChordLayout();
+            // Mouse + touch hover (bindPointerHover adds mousemove,
+            // touchstart, touchmove; touch is preventDefault'd).
+            if (unbindHover) unbindHover();
+            unbindHover = SteamViz.bindPointerHover(canvas, onPointerHover);
             render();
         },
 
         deactivate() {
             active = false;
+            if (unbindHover) {
+                unbindHover();
+                unbindHover = null;
+            }
         },
 
         onFilterChange() {

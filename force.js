@@ -36,6 +36,7 @@
     let sizeMode = 'reviews';    // 'reviews' | 'rating' | 'price' | 'connections'
     let nodeDegree = null;       // Map: simIdx → connection count
     let skipEdgeFrames = 0;      // Skip edges for N renders after tab switch
+    let unbindTouchHover = null; // Cleanup for touch-hover listeners
 
     // ── Tuning ──
     const NODE_MIN_R = 1.5;
@@ -255,14 +256,12 @@
 
     // ── Resize ──
     function resize() {
-        dpr = window.devicePixelRatio || 1;
-        width = window.innerWidth;
-        height = window.innerHeight;
-        canvas.width = width * dpr;
-        canvas.height = height * dpr;
-        canvas.style.width = width + 'px';
-        canvas.style.height = height + 'px';
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        // SteamViz.setupCanvas sizes the canvas for DPR (setTransform, idempotent)
+        // and returns CSS-pixel dimensions. ctx is the same 2D context object.
+        const dims = SteamViz.setupCanvas(canvas);
+        width = dims.width;
+        height = dims.height;
+        dpr = dims.dpr;
     }
 
     // ── Coordinate transforms ──
@@ -452,7 +451,7 @@
         ctx.fillStyle = 'rgba(10, 10, 10, 0.92)';
         ctx.strokeStyle = '#444';
         ctx.lineWidth = 1;
-        roundRect(ctx, rx, ry, tw + pad * 2, h, 6);
+        SteamViz.roundRect(ctx, rx, ry, tw + pad * 2, h, 6);
         ctx.fill();
         ctx.stroke();
 
@@ -479,25 +478,11 @@
         const sy = height - 30;
 
         ctx.fillStyle = 'rgba(10, 10, 10, 0.75)';
-        roundRect(ctx, 8, sy - 4, stw + 16, 22, 4);
+        SteamViz.roundRect(ctx, 8, sy - 4, stw + 16, 22, 4);
         ctx.fill();
 
         ctx.fillStyle = '#888';
         ctx.fillText(text, 16, sy);
-    }
-
-    function roundRect(ctx, x, y, w, h, r) {
-        ctx.beginPath();
-        ctx.moveTo(x + r, y);
-        ctx.lineTo(x + w - r, y);
-        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-        ctx.lineTo(x + w, y + h - r);
-        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-        ctx.lineTo(x + r, y + h);
-        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-        ctx.lineTo(x, y + r);
-        ctx.quadraticCurveTo(x, y, x + r, y);
-        ctx.closePath();
     }
 
     // ── Hit detection ──
@@ -615,6 +600,35 @@
         }
     }
 
+    // Touch-hover: inspect a node by sliding a finger across the canvas.
+    // Reuses the same hover state as onMouseMove. Does NOT preventDefault so
+    // d3-zoom touch pan/drag keep working; during an active node drag we bail
+    // (draggedNode is set), so a touch-drag still drags and a touch-slide inspects.
+    function onTouchHover(pos) {
+        if (draggedNode) return;
+        if (!layoutLoaded) return;
+
+        const hit = hitTest(pos.x, pos.y);
+        if (hit !== hoveredNode) {
+            hoveredNode = hit;
+            // Re-render if simulation is idle
+            if (!simulation || simulation.alpha() < 0.005) render();
+        }
+    }
+
+    // Bind touch-hover listeners once (idempotent). Stores an unbind in
+    // unbindTouchHover so deactivate() can remove them.
+    function bindTouchHover() {
+        if (unbindTouchHover) return;
+        const listener = (e) => onTouchHover(SteamViz.pointerPos(canvas, e));
+        canvas.addEventListener('touchstart', listener, { passive: true });
+        canvas.addEventListener('touchmove', listener, { passive: true });
+        unbindTouchHover = () => {
+            canvas.removeEventListener('touchstart', listener);
+            canvas.removeEventListener('touchmove', listener);
+        };
+    }
+
     function onClick(e) {
         if (draggedNode) return;
         if (!layoutLoaded) return;
@@ -668,6 +682,7 @@
             canvas.addEventListener('mousemove', onMouseMove);
             canvas.addEventListener('click', onClick);
             canvas.addEventListener('mouseleave', onMouseLeave);
+            bindTouchHover();
             window.addEventListener('resize', onResize);
             window.addEventListener('keydown', onKeyDown);
             await loadAndBuild();
@@ -676,6 +691,7 @@
         activate() {
             active = true;
             skipEdgeFrames = 3;  // Skip edges for first few renders so tab switch stays responsive
+            bindTouchHover();    // Re-bind if a prior deactivate() removed it
             resize();
             // Defer heavy rendering to next frame so tab click returns immediately
             requestAnimationFrame(() => {
@@ -699,6 +715,11 @@
             active = false;
             // Pause simulation when not visible
             if (simulation) simulation.stop();
+            // Remove touch-hover listeners while inactive
+            if (unbindTouchHover) {
+                unbindTouchHover();
+                unbindTouchHover = null;
+            }
         },
 
         onFilterChange() {
