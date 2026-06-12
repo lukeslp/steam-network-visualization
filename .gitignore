@@ -10,6 +10,10 @@ REPO_AUDIT.md
 *_STATUS.md
 .aider*
 
+# Full untrimmed co-review graph (42MB, 861K edges) — local source for
+# regenerating the trimmed steam_network.json the page actually loads.
+steam_network_full.json
+
 # Python
 __pycache__/
 

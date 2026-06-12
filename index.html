@@ -874,7 +874,7 @@
         // ═══════════════════════════════════
         // DATA LOADING
         // ═══════════════════════════════════
-        const _v = 'v=6';  // Bump to bust browser cache after data changes
+        const _v = 'v=7';  // Bump to bust browser cache after data changes
 
         (async () => {
             const t0 = performance.now();
@@ -1128,7 +1128,7 @@
                         edgeLimit = Math.floor(networkEdges.length * edgeDensity);
                     }
                     edgeLimit = Math.max(edgeLimit, 100);
-                    edgeLimit = Math.min(edgeLimit, 300000); // Hard cap for performance
+                    edgeLimit = Math.min(edgeLimit, 80000); // Hard cap: keep per-frame bezier count sane
                 }
 
                 if (activeIsConnected) {
