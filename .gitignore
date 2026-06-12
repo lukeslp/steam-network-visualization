@@ -9,3 +9,18 @@ SUGGESTIONS.md
 REPO_AUDIT.md
 *_STATUS.md
 .aider*
+
+# Python
+__pycache__/
+
+# Tracker backups
+.nextup.json.bak
+
+# Test screenshots from browser automation
+network-*.png
+chord-*.png
+steam-filter-*.png
+steam-chord-*.png
+steam-back-*.png
+steam-focus-*.png
+universe-*.png
