@@ -298,12 +298,14 @@
         else fillColor = baseColor + '66'; // game (40% opacity)
       }
 
-      // Highlight on hover
+      // Highlight the hovered node and its lineage (ancestors up to the root
+      // and everything beneath it). d3's ancestors() excludes the node itself,
+      // so compare against the hovered node directly to ring the whole path.
       const isHovered = hoveredNode === node;
-      const isAncestor = isHovered && hoveredNode && hoveredNode.ancestors().includes(node);
-      const isDescendant = isHovered && hoveredNode && node.ancestors().includes(hoveredNode);
+      const inHoverPath = !!hoveredNode && !isHovered &&
+        (hoveredNode.ancestors().includes(node) || node.ancestors().includes(hoveredNode));
 
-      if (isHovered || isAncestor || isDescendant) {
+      if (isHovered || inHoverPath) {
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 2 / transform.k;
         ctx.beginPath();

@@ -12,7 +12,6 @@
   let width = 0, height = 0;
 
   // Data structures
-  let hierarchy = null;
   let rootNode = null;
   let treemapLayout = null;
   let zoomedGenre = null; // null | { genreIdx, genreName, developers }

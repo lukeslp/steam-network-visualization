@@ -473,32 +473,71 @@
             header { flex-wrap: wrap; padding: 10px 12px; gap: 8px; }
             h1 { font-size: 1rem; }
             .subtitle { display: none; }
-            .tab-bar { top: 38px; }
-            .tab-btn { padding: 8px 12px; font-size: 0.7rem; min-height: 36px; }
+
+            /* Tab bar: span the width and scroll horizontally instead of
+               clipping the 8 tabs off both edges of a centered pill bar. */
+            .tab-bar {
+                top: 38px; left: 8px; right: 8px;
+                transform: none;
+                justify-content: flex-start;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: none;
+            }
+            .tab-bar::-webkit-scrollbar { display: none; }
+            .tab-btn { padding: 8px 12px; font-size: 0.7rem; min-height: 36px; flex: 0 0 auto; }
+
             .search-wrap { top: 76px; left: 12px; }
             .search-toggle { display: flex; }
             .search-field { width: 0; opacity: 0; overflow: hidden; pointer-events: none; }
             .search-field.expanded { width: 220px; opacity: 1; pointer-events: auto; margin-left: 6px; }
             .search-field.expanded .search-input { width: 100%; font-size: 16px; min-height: 44px; }
-            .sidebar-stack { bottom: 8px; left: 8px; max-width: 200px; }
-            .controls-panel.collapsed .controls-body { max-height: 0; padding: 0 12px; }
-            .range-slider input[type="range"]::-webkit-slider-thumb { height: 18px; width: 18px; }
-            .range-slider input[type="range"]::-moz-range-thumb { height: 18px; width: 18px; }
-            .range-slider { height: 34px; }
-            .color-pill { font-size: 0.55rem; padding: 8px 10px; min-height: 44px; display: flex; align-items: center; justify-content: center; }
+
+            /* Controls become a full-width bottom drawer: collapsed by default
+               (JS adds .collapsed on load), scrollable when expanded so a tall
+               stack of filters never runs off the top of the screen. */
+            .sidebar-stack {
+                bottom: 8px; left: 8px; right: 8px;
+                max-width: none;
+            }
+            .controls-panel, .filter-panel, #network-controls {
+                width: 100%; max-width: none;
+            }
+            .controls-body {
+                max-height: 60vh;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+            .controls-panel.collapsed .controls-body { max-height: 0; padding: 0 12px; overflow: hidden; }
+
+            /* Touch targets: ≥40px hit areas on every interactive control. */
+            .controls-header { padding: 12px; min-height: 44px; }
+            .range-slider { height: 38px; }
+            .range-slider input[type="range"]::-webkit-slider-thumb { height: 20px; width: 20px; }
+            .range-slider input[type="range"]::-moz-range-thumb { height: 20px; width: 20px; }
+            .color-pill {
+                font-size: 0.6rem; padding: 8px 12px; min-height: 40px;
+                display: flex; align-items: center; justify-content: center;
+            }
+            .genre-pill {
+                padding: 7px 10px; font-size: 0.6rem; min-height: 34px;
+                display: inline-flex; align-items: center;
+            }
+            .filter-reset { padding: 8px 14px; min-height: 36px; }
+
             .info-panel { top: auto; bottom: 8px; right: 8px; left: 8px; width: auto; max-height: 55vh; overflow-y: auto; }
             .legend.mobile-hidden { opacity: 0; pointer-events: none; transition: opacity 0.2s; }
             .controls-panel.mobile-hidden { opacity: 0; pointer-events: none; transition: opacity 0.2s; }
             .help-icon { right: 46px; width: 36px; height: 36px; font-size: 16px; }
             .fullscreen-btn { width: 36px; height: 36px; font-size: 16px; }
-            footer { bottom: 8px; right: 8px; }
+            /* Footer credit would sit under the bottom controls drawer; the same
+               links live in the help menu, so drop it on small screens. */
+            footer { display: none; }
         }
         @media (max-width: 480px) {
-            .legend { max-width: 150px; font-size: 0.6rem; }
-            .controls-panel { max-width: 150px; font-size: 0.6rem; }
-            .color-mode { gap: 3px; }
-            .color-pill { padding: 3px 5px; font-size: 0.5rem; }
-            .sidebar-stack { max-width: 170px; }
+            h1 { font-size: 0.95rem; }
+            .tab-btn { padding: 8px 10px; }
+            .color-mode { gap: 4px; }
         }
     </style>
 </head>
@@ -535,7 +574,6 @@
         <button class="tab-btn" data-tab="chord">Chord</button>
         <button class="tab-btn" data-tab="force">Network</button>
         <button class="tab-btn" data-tab="treemap">Treemap</button>
-        <button class="tab-btn" data-tab="calendar">Calendar</button>
         <button class="tab-btn" data-tab="sankey">Sankey</button>
         <button class="tab-btn" data-tab="tree">Tree</button>
         <button class="tab-btn" data-tab="flower">Flower</button>
@@ -545,7 +583,6 @@
     <canvas id="canvas-chord" class="hidden-tab"></canvas>
     <canvas id="canvas-force" class="hidden-tab"></canvas>
     <canvas id="canvas-treemap" class="hidden-tab"></canvas>
-    <canvas id="canvas-calendar" class="hidden-tab"></canvas>
     <canvas id="canvas-sankey" class="hidden-tab"></canvas>
     <canvas id="canvas-tree" class="hidden-tab"></canvas>
     <canvas id="canvas-flower" class="hidden-tab"></canvas>
@@ -2023,7 +2060,6 @@
     <script src="chord.js"></script>
     <script src="force.js"></script>
     <script src="treemap.js"></script>
-    <script src="calendar.js"></script>
     <script src="sankey.js"></script>
     <script src="tree.js"></script>
     <script src="flower.js"></script>
@@ -2040,7 +2076,6 @@
             chord: document.getElementById('canvas-chord'),
             force: document.getElementById('canvas-force'),
             treemap: document.getElementById('canvas-treemap'),
-            calendar: document.getElementById('canvas-calendar'),
             sankey: document.getElementById('canvas-sankey'),
             tree: document.getElementById('canvas-tree'),
             flower: document.getElementById('canvas-flower'),
